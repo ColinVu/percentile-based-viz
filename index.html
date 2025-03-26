@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Country Development Indicators - Percentile Scroll</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/scrollama/3.2.0/scrollama.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f7fa;
+      color: #333;
+      overflow-x: hidden;
+    }
+    
+    .header {
+      text-align: center;
+      padding: 20px;
+      background-color: white;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+      color: #2c3e50;
+    }
+    
+    .controls {
+      margin: 15px 0;
+    }
+    
+    select {
+      padding: 8px 15px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+      margin-right: 10px;
+      min-width: 200px;
+    }
+    
+    .main-container {
+      display: flex;
+      min-height: calc(100vh - 100px);
+    }
+    
+    .scroll-section {
+      flex: 1;
+      height: calc(100vh - 100px);
+      overflow-y: auto;
+      padding: 0 20px;
+      scrollbar-width: thin;
+      scrollbar-color: #3498db #f1f1f1;
+    }
+    
+    .scroll-section::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .scroll-section::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    
+    .scroll-section::-webkit-scrollbar-thumb {
+      background-color: #3498db;
+      border-radius: 6px;
+    }
+    
+    .visualization-section {
+      flex: 2;
+      position: sticky;
+      top: 100px;
+      height: calc(100vh - 100px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    
+    .percentile-display {
+      font-size: 72px;
+      font-weight: bold;
+      color: #3498db;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    
+    .metric-cards {
+      width: 90%;
+      max-width: 600px;
+      max-height: 60vh;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    
+    .metric-card {
+      background-color: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 15px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      border-left: 5px solid #3498db;
+      transition: all 0.3s ease;
+    }
+    
+    .metric-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    
+    .metric-name {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: #2c3e50;
+    }
+    
+    .metric-value {
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+    
+    .metric-percentile {
+      font-size: 16px;
+      color: #e74c3c;
+      font-weight: bold;
+    }
+    
+    .step {
+      height: 80vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.3;
+      transition: opacity 0.3s ease;
+      margin: 10vh 0;
+    }
+    
+    .step.is-active {
+      opacity: 1;
+    }
+    
+    .step-content {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      text-align: center;
+      width: 80%;
+    }
+    
+    .percentile-label {
+      font-size: 36px;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    
+    .percentile-description {
+      margin-top: 10px;
+      color: #7f8c8d;
+    }
+    
+    .loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.9);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      font-size: 18px;
+    }
+    
+    .no-metrics {
+      text-align: center;
+      color: #7f8c8d;
+      font-style: italic;
+      padding: 20px;
+    }
+    
+    .scroll-indicator {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #7f8c8d;
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      animation: bounce 2s infinite;
+    }
+    
+    .scroll-icon {
+      margin-top: 5px;
+      font-size: 20px;
+    }
+    
+    @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+      }
+      40% {
+        transform: translateY(-10px);
+      }
+      60% {
+        transform: translateY(-5px);
+      }
+    }
+    
+    #file-input {
+      display: none;
+    }
+    
+    .file-upload {
+      display: inline-block;
+      padding: 8px 15px;
+      background-color: #2ecc71;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    
+    .file-upload:hover {
+      background-color: #27ae60;
+    }
+    
+    .file-name {
+      display: inline-block;
+      margin-left: 10px;
+      font-style: italic;
+      color: #7f8c8d;
+    }
+    
+    .country-info {
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    
+    .country-name {
+      font-size: 28px;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    
+    .instructions {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #edf2f7;
+      border-radius: 8px;
+      color: #4a5568;
+      text-align: center;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="loading">Loading data...</div>
+
+  <div class="header">
+    <h1>Country Development Indicators - Percentile Scroll</h1>
+    <div class="controls">
+      <label for="file-input" class="file-upload">Upload Excel File</label>
+      <input type="file" id="file-input" accept=".xlsx,.xls">
+      <span class="file-name" id="file-name">No file selected</span>
+      <select id="countrySelect">
+        <option value="">Select a country...</option>
+      </select>
+    </div>
+
+  </div>
+  
+  <div class="main-container">
+    <div class="scroll-section" id="scroll-section">
+      <!-- Percentile steps will be generated here -->
+    </div>
+    
+    <div class="visualization-section">
+      <div class="country-info">
+        <div class="country-name" id="country-name">Select a country</div>
+      </div>
+      <div class="percentile-display" id="percentile-display">50%</div>
+      <div class="metric-cards" id="metric-cards">
+        <div class="no-metrics">Please select a country</div>
+      </div>
+      <!-- <div class="scroll-indicator">
+        <div>Scroll on the left to explore percentiles</div>
+        <div class="scroll-icon">↕</div> -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Global variables
+    let jsonData = [];
+    let countries = [];
+    let currentPercentiles = {};
+    let selectedCountry = '';
+    let scroller = null;
+    
+    // Initialize the application
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check if we have example data to use
+      setupExampleData();
+      
+      // Create percentile steps
+      createPercentileSteps();
+      
+      // Setup event listeners
+      setupEventListeners();
+      
+      // Initialize scrollama
+      initScrollama();
+      
+      // Hide loading indicator
+      document.querySelector('.loading').style.display = 'none';
+    });
+    
+    // Set up example data
+    function setupExampleData() {
+      // Sample data to use if no file is uploaded
+      const sampleData = [
+        { 
+          "Country": "Eritrea",
+          "Lifeexpectancyatbirth": 65.941,
+          "Gross_national_income_percapita": 1707.710964,
+          "Totalfertilityrate": 4.1,
+          "Meanyearsofschooling": 3.9,
+          "Population25Older_SomeSecondaryEducation": "..",
+          "MaternalMortality_per100Kbirths": 501,
+          "PctInternetUsers": 1.30891,
+          "PctMobilePhone": 20.36396,
+          "MandatoryPaidMatLeave_Days": 60
+        },
+        { 
+          "Country": "Somalia",
+          "Lifeexpectancyatbirth": 57.068,
+          "Gross_national_income_percapita": "..",
+          "Totalfertilityrate": 6.12,
+          "Meanyearsofschooling": "..",
+          "Population25Older_SomeSecondaryEducation": "..",
+          "MaternalMortality_per100Kbirths": 732,
+          "PctInternetUsers": 2.00405,
+          "PctMobilePhone": 48.79644,
+          "MandatoryPaidMatLeave_Days": ".."
+        },
+        { 
+          "Country": "United States",
+          "Lifeexpectancyatbirth": 78.851,
+          "Gross_national_income_percapita": 56140.23348,
+          "Totalfertilityrate": 1.7764,
+          "Meanyearsofschooling": 13.41344,
+          "Population25Older_SomeSecondaryEducation": 95.58524,
+          "MaternalMortality_per100Kbirths": 14,
+          "PctInternetUsers": 87.26611,
+          "PctMobilePhone": 123.68756,
+          "MandatoryPaidMatLeave_Days": ".."
+        },
+        { 
+          "Country": "Germany",
+          "Lifeexpectancyatbirth": 81.334,
+          "Gross_national_income_percapita": 46945.94358,
+          "Totalfertilityrate": 1.586,
+          "Meanyearsofschooling": 14.15564,
+          "Population25Older_SomeSecondaryEducation": 96.95859,
+          "MaternalMortality_per100Kbirths": 7,
+          "PctInternetUsers": 87.74214,
+          "PctMobilePhone": 132.64121,
+          "MandatoryPaidMatLeave_Days": 98
+        },
+        { 
+          "Country": "Japan",
+          "Lifeexpectancyatbirth": 84.687,
+          "Gross_national_income_percapita": 40799.47818,
+          "Totalfertilityrate": 1.368,
+          "Meanyearsofschooling": 13.36984,
+          "Population25Older_SomeSecondaryEducation": "..",
+          "MaternalMortality_per100Kbirths": 5,
+          "PctInternetUsers": 91.79275,
+          "PctMobilePhone": 139.21533,
+          "MandatoryPaidMatLeave_Days": 98
+        }
+      ];
+      
+      // Use sample data initially if available
+      if (sampleData && sampleData.length > 0) {
+        jsonData = sampleData;
+        processData();
+      }
+    }
+    
+    // Process the loaded data
+    function processData() {
+      // Extract list of countries
+      countries = jsonData.map(d => d.Country).sort();
+      
+      // Populate country dropdown
+      const countrySelect = document.getElementById('countrySelect');
+      countrySelect.innerHTML = '<option value="">Select a country...</option>';
+      
+      countries.forEach(country => {
+        const option = document.createElement('option');
+        option.value = country;
+        option.textContent = country;
+        countrySelect.appendChild(option);
+      });
+      
+      // Set default country if available
+      if (countries.includes('United States')) {
+        countrySelect.value = 'United States';
+        selectedCountry = 'United States';
+      } else if (countries.length > 0) {
+        countrySelect.value = countries[0];
+        selectedCountry = countries[0];
+      }
+      
+      if (selectedCountry) {
+        // Calculate initial percentiles
+        calculatePercentiles(selectedCountry);
+        
+        // Update display
+        updateCountryInfo();
+        updateMetricsDisplay(50);
+      }
+    }
+    
+    // Create percentile steps for scrolling
+    function createPercentileSteps() {
+      const scrollSection = document.getElementById('scroll-section');
+      scrollSection.innerHTML = '';
+      
+      // Create steps from 0 to 100 by 5
+      for (let i = 0; i <= 100; i += 5) {
+        const step = document.createElement('div');
+        step.className = 'step';
+        step.setAttribute('data-step', i);
+        
+        step.innerHTML = `
+          <div class="step-content">
+            <div class="percentile-label">${i}%</div>
+            <div class="percentile-description">
+              ${i === 0 ? 'Lowest percentile' : 
+                i === 100 ? 'Highest percentile' : 
+                `${i}th percentile`}
+            </div>
+          </div>
+        `;
+        
+        scrollSection.appendChild(step);
+      }
+    }
+    
+    // Initialize scrollama
+    function initScrollama() {
+      if (typeof scrollama !== 'undefined') {
+        scroller = scrollama();
+        
+        scroller
+          .setup({
+            step: '.step',
+            offset: 0.5,
+            debug: false
+          })
+          .onStepEnter(handleStepEnter);
+        
+        // Handle resize
+        window.addEventListener('resize', scroller.resize);
+      } else {
+        console.error('Scrollama library not loaded');
+      }
+    }
+    
+    // Handle step enter event
+    function handleStepEnter(response) {
+      // Remove active class from all steps
+      document.querySelectorAll('.step').forEach(step => {
+        step.classList.remove('is-active');
+      });
+      
+      // Add active class to current step
+      response.element.classList.add('is-active');
+      
+      // Get current percentile
+      const percentile = parseInt(response.element.getAttribute('data-step'));
+      
+      // Update metrics display
+      updateMetricsDisplay(percentile);
+    }
+    
+    // Set up event listeners
+    function setupEventListeners() {
+      // File input change event
+      document.getElementById('file-input').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        document.getElementById('file-name').textContent = file.name;
+        
+        // Show loading indicator
+        document.querySelector('.loading').style.display = 'flex';
+        
+        // Read the file
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+          try {
+            // Parse the Excel file using a client-side library like SheetJS
+            if (typeof XLSX !== 'undefined') {
+              const data = new Uint8Array(e.target.result);
+              const workbook = XLSX.read(data, { type: 'array' });
+              
+              // Get the first sheet
+              const firstSheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheetName];
+              
+              // Convert to JSON
+              jsonData = XLSX.utils.sheet_to_json(worksheet);
+              
+              processData();
+            } else {
+              // If XLSX library is not available, use the example data
+              alert('XLSX library not loaded. Using example data instead.');
+              setupExampleData();
+            }
+          } catch (error) {
+            console.error('Error parsing Excel file:', error);
+            alert('Error parsing Excel file. Using example data instead.');
+            setupExampleData();
+          }
+          
+          // Hide loading indicator
+          document.querySelector('.loading').style.display = 'none';
+        };
+        
+        reader.onerror = function() {
+          console.error('Error reading file');
+          alert('Error reading file. Using example data instead.');
+          setupExampleData();
+          document.querySelector('.loading').style.display = 'none';
+        };
+        
+        reader.readAsArrayBuffer(file);
+      });
+      
+      // Country selection change event
+      document.getElementById('countrySelect').addEventListener('change', function() {
+        selectedCountry = this.value;
+        if (selectedCountry) {
+          calculatePercentiles(selectedCountry);
+          updateCountryInfo();
+          
+          // Get current step or default to 50
+          const activeStep = document.querySelector('.step.is-active');
+          const percentile = activeStep ? 
+            parseInt(activeStep.getAttribute('data-step')) : 50;
+          
+          updateMetricsDisplay(percentile);
+        } else {
+          // No country selected, reset display
+          document.getElementById('country-name').textContent = 'Select a country';
+          document.getElementById('metric-cards').innerHTML = 
+            '<div class="no-metrics">Please select a country to view metrics</div>';
+        }
+      });
+    }
+    
+    // Format metric names for display
+    function formatMetricName(metric) {
+      return metric
+        .replace(/_/g, ' ')
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/([0-9]+)/g, ' $1 ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\b\w/g, l => l.toUpperCase());
+    }
+    
+    // Calculate percentiles for a selected country
+    function calculatePercentiles(country) {
+      const countryData = jsonData.find(d => d.Country === country);
+      if (!countryData) return;
+      
+      // Get all metrics (except Country)
+      const metrics = Object.keys(countryData).filter(key => key !== 'Country');
+      
+      // Calculate percentile for each metric
+      currentPercentiles = {};
+      
+      metrics.forEach(metric => {
+        // Skip missing values
+        if (countryData[metric] === '..' || countryData[metric] === undefined || countryData[metric] === null) {
+          return;
+        }
+        
+        const value = parseFloat(countryData[metric]);
+        if (isNaN(value)) return;
+        
+        // Get all valid values for this metric across all countries
+        const validValues = jsonData
+          .filter(d => d[metric] !== '..' && d[metric] !== undefined && d[metric] !== null)
+          .map(d => parseFloat(d[metric]));
+        
+        if (validValues.length < 3) return; // Need at least 3 countries for comparison
+        
+        // Sort values
+        validValues.sort((a, b) => a - b);
+        
+        // Calculate percentile rank
+        const smaller = validValues.filter(v => v < value).length;
+        const equal = validValues.filter(v => v === value).length;
+        const percentile = Math.round((smaller + 0.5 * equal) / validValues.length * 100);
+        
+        currentPercentiles[metric] = {
+          value,
+          percentile
+        };
+      });
+    }
+    
+    // Update country info display
+    function updateCountryInfo() {
+      document.getElementById('country-name').textContent = selectedCountry;
+    }
+    
+    // Find metrics closest to a given percentile
+    function findClosestMetrics(targetPercentile, tolerance = 5) {
+      if (Object.keys(currentPercentiles).length === 0) return [];
+      
+      // Convert target to number
+      const target = parseInt(targetPercentile);
+      
+      // 1. First pass: Find the absolute closest metric regardless of tolerance
+      const entries = Object.entries(currentPercentiles);
+      let closest = entries[0];
+      let minDiff = Math.abs(closest[1].percentile - target);
+      
+      for (let i = 1; i < entries.length; i++) {
+        const diff = Math.abs(entries[i][1].percentile - target);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = entries[i];
+        }
+      }
+      
+      // 2. Now find all metrics within the tolerance of the closest
+      // We use the min difference as our reference point
+      const closestDiff = minDiff;
+      
+      // If the closest is within our tolerance, use the tolerance
+      // Otherwise, use the closest diff + 1 to ensure we get at least one result
+      const effectiveTolerance = closestDiff <= tolerance ? tolerance : closestDiff + 1;
+      
+      const matches = entries.filter(([_, data]) => 
+        Math.abs(data.percentile - target) <= effectiveTolerance
+      );
+      
+      // Sort by how close they are to the target percentile
+      matches.sort((a, b) => 
+        Math.abs(a[1].percentile - target) - Math.abs(b[1].percentile - target)
+      );
+      
+      return matches.map(([metric, data]) => ({
+        metric,
+        value: data.value,
+        percentile: data.percentile,
+        diff: Math.abs(data.percentile - target)
+      }));
+    }
+    
+    // Update metrics display based on percentile
+    function updateMetricsDisplay(percentile) {
+      // Update percentile display
+      document.getElementById('percentile-display').textContent = `${percentile}%`;
+      
+      // If no country is selected, don't proceed
+      if (!selectedCountry) {
+        document.getElementById('metric-cards').innerHTML = 
+          '<div class="no-metrics">Please select a country to view metrics</div>';
+        return;
+      }
+      
+      // Find closest metrics
+      const closestMetrics = findClosestMetrics(percentile);
+      
+      // Update metrics display
+      const metricsContainer = document.getElementById('metric-cards');
+      metricsContainer.innerHTML = '';
+      
+      if (closestMetrics.length === 0) {
+        metricsContainer.innerHTML = '<div class="no-metrics">No metrics found at this percentile</div>';
+        return;
+      }
+      
+      // Display metrics
+      closestMetrics.forEach(item => {
+        const metricCard = document.createElement('div');
+        metricCard.className = 'metric-card';
+        
+        // Set border color based on how close it is to the target (closer = more vibrant)
+        const colorIntensity = Math.max(0, 100 - item.diff * 10);
+        metricCard.style.borderLeftColor = `hsla(204, 70%, 53%, ${colorIntensity}%)`;
+        
+        metricCard.innerHTML = `
+          <div class="metric-name">${formatMetricName(item.metric)}</div>
+          <div class="metric-value">Value: ${formatValue(item.value, item.metric)}</div>
+          <div class="metric-percentile">Percentile: ${item.percentile}%</div>
+        `;
+        
+        metricsContainer.appendChild(metricCard);
+      });
+    }
+    
+    // Format values based on metric type
+    function formatValue(value, metric) {
+      // Apply specific formatting based on metric name
+      if (metric.includes('national_income') || metric.includes('Income') || metric.includes('GDP')) {
+        return '$' + value.toLocaleString();
+      } else if (metric.includes('Pct') || metric.includes('percent') || metric.includes('Percent')) {
+        return value.toFixed(1) + '%';
+      } else if (metric.endsWith('rate') || metric.endsWith('Rate')) {
+        return value.toFixed(2);
+      } else if (value >= 1000) {
+        return value.toLocaleString();
+      } else if (Number.isInteger(value)) {
+        return value.toString();
+      } else {
+        return value.toFixed(2);
+      }
+    }
+  </script>
+  
+  <!-- Include SheetJS library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</body>
+</html>

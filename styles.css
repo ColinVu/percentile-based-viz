@@ -163,8 +163,8 @@ select {
 .category-rail-track {
   position: relative;
   width: 4px;
-  background: #e2e8f0;
-  border-radius: 4px;;
+  background: #e5e7eb;
+  border-radius: 4px;
   touch-action: none;
 }
 
@@ -175,8 +175,8 @@ select {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #3498db;
-  border: 2px solid #1f6fa5;
+  background: #9ca3af;
+  border: 1px solid #6b7280;
   box-shadow: 0 2px 6px rgba(0,0,0,0.15);
   cursor: grab;
   touch-action: none;
@@ -211,12 +211,13 @@ select {
   position: absolute;
   top: 6px;
   left: 6px;
-  background: rgba(255,255,255,0.9);
+  background: transparent !important;
   color: #2c3e50;
-  padding: 4px 6px;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
   font-size: 12px;
+  font-weight: bold;
 }
 
 .scroll-section {
@@ -469,21 +470,26 @@ select {
 .dataset-selector {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 0px !important;
 }
 
 .dataset-options {
     display: flex;
-    gap: 15px;
     flex-wrap: wrap;
+    gap: 0px !important; /* eliminate row gap */
+    align-items: center;
+    align-content: flex-start !important; /* prevent rows from spreading vertically */
+    justify-content: flex-start !important; /* prevent space-between on lines */
 }
 
 .dataset-option {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     cursor: pointer;
-    padding: 5px 10px;
+    padding: 0 6px !important; /* tighter vertical + horizontal padding */
+    margin: 0 !important; /* remove default margins to eliminate extra gap */
+    line-height: 1 !important; /* reduce line box height */
     border-radius: 4px;
     transition: background-color 0.2s;
 }
@@ -493,20 +499,19 @@ select {
 }
 
 .dataset-option input[type="radio"] {
-    margin: 0;
+    margin: 0 !important;
 }
 
 .dataset-option span {
-    font-size: 14px;
+    font-size: 13px; /* slightly smaller */
     color: #2c3e50;
     font-weight: 500;
+    line-height: 1 !important;
 }
 
 .custom-upload {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px;
     background-color: #f8f9fa;
     border-radius: 4px;
     border: 1px solid #e9ecef;
@@ -514,12 +519,11 @@ select {
 
 .file-upload {
   display: inline-block;
-  padding: 6px 12px;
   background-color: #2ecc71;
   color: white;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 10px;
   text-decoration: none;
 }
 

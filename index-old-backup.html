@@ -1,0 +1,2877 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Development Indicators - Percentile Scroll</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/scrollama/3.2.0/scrollama.min.js"></script>
+  
+</head>
+<body>
+  <div class="loading">Loading data...</div>
+
+  <div class="cors-info" id="cors-info" style="display: none;">
+    <div class="cors-message">
+      <h3>⚠️ File Access Restriction</h3>
+      <p>The browser is blocking access to the Excel files due to CORS policy when opening the HTML file directly.</p>
+      <p><strong>Solutions:</strong></p>
+      <ol>
+        <li><strong>Run a local server</strong> (recommended):
+          <ul>
+            <li>Python: <code>python -m http.server 8000</code></li>
+            <li>Node.js: <code>npx serve .</code></li>
+            <li>PHP: <code>php -S localhost:8000</code></li>
+          </ul>
+          Then visit <code>http://localhost:8000</code>
+        </li>
+        <li><strong>Use the fallback sample data</strong> (current): The app will work with representative sample data</li>
+        <li><strong>Upload custom files</strong>: The file upload feature still works for custom datasets</li>
+      </ol>
+      <button onclick="document.getElementById('cors-info').style.display='none'">Got it, continue with sample data</button>
+    </div>
+  </div>
+
+  <div class="header">
+    <div class="control-bar">
+      <div class="dataset-selector">
+        <div class="dataset-options">
+          <label class="dataset-option">
+            <input type="radio" name="dataset" value="us-counties" checked>
+            <span>US County Indicators</span>
+          </label>
+          <label class="dataset-option">
+            <input type="radio" name="dataset" value="country-development">
+            <span>Country Development Indicators</span>
+          </label>
+          <label class="dataset-option">
+            <input type="radio" name="dataset" value="custom">
+            <span>Custom Dataset</span>
+            <div class="custom-upload" id="custom-upload" style="display: none;">
+              <label for="file-input" class="file-upload">Upload</label>
+        <input type="file" id="file-input" accept=".xlsx,.xls">
+        <span class="file-name" id="file-name">No file selected</span>
+            </div>
+          </label>
+        </div>
+      </div>
+      <h1 id="app-title">Percentile Scroll</h1>
+      <select id="countrySelect">
+        <option value="">Select an area...</option>
+      </select>
+    </div>
+    <div class="toggle-view">
+      <div class="toggle-view-label">
+        Select view:
+      </div>
+      <select class="toggle-view-select" id="toggle-view">
+        <option value="percentile" selected>Percentile Scroll</option>
+        <option value="identifier">Location Identifier View</option>
+        <option value="category">Category Slider View</option>
+        <option value="category-v2">Category Slider V2</option>
+        <option value="category-v3">Category Slider V3</option>
+        <option value="box">Box and Whisker</option>
+      </select>
+    </div>
+
+  </div>
+  
+  <div class="percentile-scroll-container" id="percentile-scroll-container">
+    <div class="scroll-section" id="scroll-section">
+      <!-- Percentile steps will be generated here -->
+    </div>
+    
+    <div class="visualization-section">
+      <div class="country-info">
+        <div class="country-name" id="country-name">Select an area</div>
+        <div class="percentile-display" id="percentile-display">50%</div>
+      </div>
+      <div class="metric-cards" id="metric-cards">
+        <div class="no-metrics">Please select a country</div>
+      </div>
+      <!-- <div class="scroll-indicator">
+        <div>Scroll on the left to explore percentiles</div>
+        <div class="scroll-icon">↕</div> -->
+      </div>
+    </div>
+  </div>
+
+  <div class="country-identifier-container hidden" id="country-identifier-container">
+    <div class="identifier-layout">
+      <div class="indicator-list" id="indicator-list"></div>
+      <div class="beeswarm-panel">
+        <svg id="beeswarm-svg"></svg>
+        <div class="tooltip hidden" id="beeswarm-tooltip"></div>
+        <div class="hover-label hidden" id="beeswarm-hover-label"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Global variables
+    let jsonData = [];
+    let entities = [];
+    let currentPercentiles = {};
+    let selectedCountry = '';
+    let geoMode = 'country'; // 'country' or 'county'
+    let scroller = null;
+    let viewMode = 'percentile'; // 'percentile' | 'identifier' | 'category'
+    let categorySelectedMetricKey = null;
+    let categorySnapPoints = [];
+    let previousBeeswarmNodes = []; // Store previous node positions for smooth transitions
+    
+    // Initialize the application
+    document.addEventListener('DOMContentLoaded', function() {
+      // Create percentile steps
+      createPercentileSteps();
+      
+      // Setup event listeners
+      setupEventListeners();
+      
+      // Initialize scrollama
+      initScrollama();
+      
+      // Load the default dataset (US Counties)
+      loadSelectedDataset();
+    });
+    
+    // Load dataset based on selection
+    async function loadSelectedDataset() {
+      const selectedDataset = document.querySelector('input[name="dataset"]:checked').value;
+      
+      // Show loading indicator
+      document.querySelector('.loading').style.display = 'flex';
+      
+      try {
+        if (selectedDataset === 'us-counties') {
+          await loadUSCountyData();
+        } else if (selectedDataset === 'country-development') {
+          await loadCountryDevelopmentData();
+        }
+        // Custom dataset is handled by file input event
+      } catch (error) {
+        console.error('Error loading dataset:', error);
+        alert('Error loading dataset. Please try again.');
+      } finally {
+      // Hide loading indicator
+      document.querySelector('.loading').style.display = 'none';
+      }
+    }
+    
+    // Load US County indicators dataset
+    async function loadUSCountyData() {
+      try {
+        const response = await fetch('us-county-indicators.xlsx');
+        const arrayBuffer = await response.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Get the first sheet
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to JSON
+        jsonData = XLSX.utils.sheet_to_json(worksheet);
+        processData();
+      } catch (error) {
+        console.error('Error loading US County data:', error);
+        // Fallback to sample county data
+        loadFallbackCountyData();
+      }
+    }
+    
+    // Load Country Development indicators dataset
+    async function loadCountryDevelopmentData() {
+      try {
+        const response = await fetch('CountryDevelopmentIndicators.xlsx');
+        const arrayBuffer = await response.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Get the first sheet
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to JSON
+        jsonData = XLSX.utils.sheet_to_json(worksheet);
+        processData();
+      } catch (error) {
+        console.error('Error loading Country Development data:', error);
+        // Fallback to sample country data
+        loadFallbackCountryData();
+      }
+    }
+    
+    // Fallback sample data for US Counties (when file can't be loaded)
+    function loadFallbackCountyData() {
+      jsonData = [
+        {
+          "County": "Alameda",
+          "State": "California",
+          "Population": 1671329,
+          "MedianIncome": 94588,
+          "PovertyRate": 9.8,
+          "UnemploymentRate": 4.1,
+          "LifeExpectancy": 82.4,
+          "EducationBachelor": 45.2,
+          "HealthcareAccess": 91.2
+        },
+        {
+          "County": "Cook",
+          "State": "Illinois", 
+          "Population": 5150233,
+          "MedianIncome": 65886,
+          "PovertyRate": 13.4,
+          "UnemploymentRate": 5.2,
+          "LifeExpectancy": 78.9,
+          "EducationBachelor": 35.8,
+          "HealthcareAccess": 87.6
+        },
+        {
+          "County": "Harris",
+          "State": "Texas",
+          "Population": 4731145,
+          "MedianIncome": 64588,
+          "PovertyRate": 15.1,
+          "UnemploymentRate": 4.8,
+          "LifeExpectancy": 79.2,
+          "EducationBachelor": 32.4,
+          "HealthcareAccess": 82.1
+        },
+        {
+          "County": "Maricopa",
+          "State": "Arizona",
+          "Population": 4485414,
+          "MedianIncome": 68234,
+          "PovertyRate": 12.8,
+          "UnemploymentRate": 4.3,
+          "LifeExpectancy": 80.1,
+          "EducationBachelor": 31.7,
+          "HealthcareAccess": 85.3
+        },
+        {
+          "County": "Orange",
+          "State": "California",
+          "Population": 3186989,
+          "MedianIncome": 94441,
+          "PovertyRate": 9.2,
+          "UnemploymentRate": 3.8,
+          "LifeExpectancy": 83.1,
+          "EducationBachelor": 42.1,
+          "HealthcareAccess": 89.7
+        }
+      ];
+      console.log('Using fallback US County data due to CORS restrictions');
+      // Only show CORS info if running locally (file:// protocol)
+      if (window.location.protocol === 'file:') {
+        showCorsInfo();
+      }
+      processData();
+    }
+    
+    // Fallback sample data for Countries (when file can't be loaded)
+    function loadFallbackCountryData() {
+      jsonData = [
+        { 
+          "Country": "United States",
+          "Lifeexpectancyatbirth": 78.851,
+          "Gross_national_income_percapita": 56140.23348,
+          "Totalfertilityrate": 1.7764,
+          "Meanyearsofschooling": 13.41344,
+          "Population25Older_SomeSecondaryEducation": 95.58524,
+          "MaternalMortality_per100Kbirths": 14,
+          "PctInternetUsers": 87.26611,
+          "PctMobilePhone": 123.68756,
+          "MandatoryPaidMatLeave_Days": ".."
+        },
+        { 
+          "Country": "Germany",
+          "Lifeexpectancyatbirth": 81.334,
+          "Gross_national_income_percapita": 46945.94358,
+          "Totalfertilityrate": 1.586,
+          "Meanyearsofschooling": 14.15564,
+          "Population25Older_SomeSecondaryEducation": 96.95859,
+          "MaternalMortality_per100Kbirths": 7,
+          "PctInternetUsers": 87.74214,
+          "PctMobilePhone": 132.64121,
+          "MandatoryPaidMatLeave_Days": 98
+        },
+        { 
+          "Country": "Japan",
+          "Lifeexpectancyatbirth": 84.687,
+          "Gross_national_income_percapita": 40799.47818,
+          "Totalfertilityrate": 1.368,
+          "Meanyearsofschooling": 13.36984,
+          "Population25Older_SomeSecondaryEducation": "..",
+          "MaternalMortality_per100Kbirths": 5,
+          "PctInternetUsers": 91.79275,
+          "PctMobilePhone": 139.21533,
+          "MandatoryPaidMatLeave_Days": 98
+        },
+        { 
+          "Country": "Brazil",
+          "Lifeexpectancyatbirth": 75.887,
+          "Gross_national_income_percapita": 14103.45182,
+          "Totalfertilityrate": 1.736,
+          "Meanyearsofschooling": 8.02056,
+          "Population25Older_SomeSecondaryEducation": 58.51515,
+          "MaternalMortality_per100Kbirths": 60,
+          "PctInternetUsers": 70.70329,
+          "PctMobilePhone": 104.70044,
+          "MandatoryPaidMatLeave_Days": 120
+        },
+        { 
+          "Country": "India",
+          "Lifeexpectancyatbirth": 69.657,
+          "Gross_national_income_percapita": 6426.674805,
+          "Totalfertilityrate": 2.179,
+          "Meanyearsofschooling": 6.49648,
+          "Population25Older_SomeSecondaryEducation": 40.84507,
+          "MaternalMortality_per100Kbirths": 145,
+          "PctInternetUsers": 41.00000,
+          "PctMobilePhone": 84.86432,
+          "MandatoryPaidMatLeave_Days": 182
+        }
+      ];
+      console.log('Using fallback Country Development data due to CORS restrictions');
+      // Only show CORS info if running locally (file:// protocol)
+      if (window.location.protocol === 'file:') {
+        showCorsInfo();
+      }
+        processData();
+    }
+    
+    // Show CORS information message
+    function showCorsInfo() {
+      const corsInfo = document.getElementById('cors-info');
+      if (corsInfo) {
+        corsInfo.style.display = 'flex';
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+          corsInfo.style.display = 'none';
+        }, 10000);
+      }
+    }
+    
+    // Process the loaded data
+    function processData() {
+      // Detect schema: Country vs County/State
+      const firstRow = jsonData && jsonData.length > 0 ? jsonData[0] : null;
+      const hasCountry = firstRow && Object.prototype.hasOwnProperty.call(firstRow, 'Country');
+      const hasCountyState = firstRow && Object.prototype.hasOwnProperty.call(firstRow, 'County') && Object.prototype.hasOwnProperty.call(firstRow, 'State');
+      
+      if (hasCountry) {
+        geoMode = 'country';
+      } else if (hasCountyState) {
+        geoMode = 'county';
+      } else {
+        alert('Unsupported data format. Expect a "Country" column or "County" and "State" columns.');
+        return;
+      }
+      
+      // Populate dropdown
+      const countrySelect = document.getElementById('countrySelect');
+      const titleEl = document.getElementById('app-title');
+      const nameEl = document.getElementById('country-name');
+      
+      if (geoMode === 'country') {
+        titleEl.textContent = 'Percentile Scroll';
+        countrySelect.innerHTML = '<option value="">Select a country...</option>';
+        nameEl.textContent = 'Select a country';
+        entities = jsonData.map(d => d.Country).filter(Boolean).sort();
+      } else {
+        titleEl.textContent = 'US County Development Indicators - Percentile Scroll';
+        countrySelect.innerHTML = '<option value="">Select a county...</option>';
+        nameEl.textContent = 'Select a county';
+        // Create a display label and keep original columns for filtering
+        jsonData.forEach(d => { d.__displayName = `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`; });
+        entities = jsonData
+          .filter(d => d.County && d.State)
+          .map(d => d.__displayName)
+          .sort((a, b) => a.localeCompare(b));
+      }
+      
+      entities.forEach(label => {
+        const option = document.createElement('option');
+        option.value = label;
+        option.textContent = label;
+        countrySelect.appendChild(option);
+      });
+      
+      // Set default selection
+      if (geoMode === 'country') {
+        if (entities.includes('United States')) {
+          countrySelect.value = 'United States';
+          selectedCountry = 'United States';
+        } else if (entities.length > 0) {
+          countrySelect.value = entities[0];
+          selectedCountry = entities[0];
+        }
+      } else {
+        if (entities.length > 0) {
+          countrySelect.value = entities[0];
+          selectedCountry = entities[0];
+        }
+      }
+      
+      if (selectedCountry) {
+        calculatePercentiles(selectedCountry);
+        updateCountryInfo();
+        updateMetricsDisplay(50);
+      }
+    }
+    
+    // Create percentile steps for scrolling
+    function createPercentileSteps() {
+      const scrollSection = document.getElementById('scroll-section');
+      scrollSection.innerHTML = '';
+      
+      // Create steps from 0 to 100 by 5
+      for (let i = 0; i <= 100; i += 5) {
+        const step = document.createElement('div');
+        step.className = 'step';
+        step.setAttribute('data-step', i);
+        
+        step.innerHTML = `
+          <div class="step-content">
+            <div class="percentile-label">${i}%</div>
+            <div class="percentile-description">
+              ${i === 0 ? 'Lowest percentile' : 
+                i === 100 ? 'Highest percentile' : 
+                `${i}th percentile`}
+            </div>
+          </div>
+        `;
+        
+        scrollSection.appendChild(step);
+      }
+    }
+    
+    // Initialize scrollama
+    function initScrollama() {
+      if (typeof scrollama !== 'undefined') {
+        scroller = scrollama();
+        
+        scroller
+          .setup({
+            step: '.step',
+            offset: 0.35,
+            debug: false
+          })
+          .onStepEnter(handleStepEnter);
+        
+        // Handle resize
+        window.addEventListener('resize', scroller.resize);
+      } else {
+        console.error('Scrollama library not loaded');
+      }
+    }
+    
+    // Handle step enter event
+    function handleStepEnter(response) {
+      // Remove active class from all steps
+      document.querySelectorAll('.step').forEach(step => {
+        step.classList.remove('is-active');
+      });
+      
+      // Add active class to current step
+      response.element.classList.add('is-active');
+      
+      // Get current percentile
+      const percentile = parseInt(response.element.getAttribute('data-step'));
+      
+      // Update metrics display
+      updateMetricsDisplay(percentile);
+    }
+    
+    // Set up event listeners
+    function setupEventListeners() {
+      // Dataset selection change event
+      document.querySelectorAll('input[name="dataset"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+          const customUpload = document.getElementById('custom-upload');
+          if (this.value === 'custom') {
+            customUpload.style.display = 'flex';
+          } else {
+            customUpload.style.display = 'none';
+            // Clear file input if switching away from custom
+            const fileInput = document.getElementById('file-input');
+            const fileName = document.getElementById('file-name');
+            fileInput.value = '';
+            fileName.textContent = 'No file selected';
+            // Load the selected dataset
+            loadSelectedDataset();
+          }
+        });
+      });
+      
+      // File input change event
+      document.getElementById('file-input').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        document.getElementById('file-name').textContent = file.name;
+        
+        // Show loading indicator
+        document.querySelector('.loading').style.display = 'flex';
+        
+        // Read the file
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+          try {
+            // Parse the Excel file using a client-side library like SheetJS
+            if (typeof XLSX !== 'undefined') {
+              const data = new Uint8Array(e.target.result);
+              const workbook = XLSX.read(data, { type: 'array' });
+              
+              // Get the first sheet
+              const firstSheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheetName];
+              
+              // Convert to JSON
+              jsonData = XLSX.utils.sheet_to_json(worksheet);
+              
+              processData();
+            } else {
+              // If XLSX library is not available, use the example data
+              alert('XLSX library not loaded. Using example data instead.');
+              setupExampleData();
+            }
+          } catch (error) {
+            console.error('Error parsing Excel file:', error);
+            alert('Error parsing Excel file. Using example data instead.');
+            setupExampleData();
+          }
+          
+          // Hide loading indicator
+          document.querySelector('.loading').style.display = 'none';
+        };
+        
+        reader.onerror = function() {
+          console.error('Error reading file');
+          alert('Error reading file. Using example data instead.');
+          setupExampleData();
+          document.querySelector('.loading').style.display = 'none';
+        };
+        
+        reader.readAsArrayBuffer(file);
+      });
+      
+      // Country/County selection change event
+      document.getElementById('countrySelect').addEventListener('change', function() {
+        selectedCountry = this.value;
+        if (selectedCountry) {
+          calculatePercentiles(selectedCountry);
+          updateCountryInfo();
+          
+          // Get current step or default to 50
+          const activeStep = document.querySelector('.step.is-active');
+          const percentile = activeStep ? 
+            parseInt(activeStep.getAttribute('data-step')) : 50;
+          
+          updateMetricsDisplay(percentile);
+
+          // If in identifier/category view, refresh lists and active chart
+          const activeMetricBtn = document.querySelector('.indicator-list .indicator-item.active');
+          if (viewMode === 'identifier') {
+            renderIdentifierMetricList();
+            const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBeeswarm(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (viewMode === 'category') {
+            renderCategoryMetricList();
+            const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBeeswarmCategory(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (viewMode === 'category-v2') {
+            renderCategoryMetricListV2();
+            const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBeeswarmCategory(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (viewMode === 'category-v3') {
+            renderCategoryMetricListV3();
+            const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBeeswarmCategoryV3(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (viewMode === 'box') {
+            renderCategoryMetricListBox();
+            const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBoxPlotCategory(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          }
+        } else {
+          // No selection, reset display
+          document.getElementById('country-name').textContent = geoMode === 'country' ? 'Select a country' : 'Select a county';
+          document.getElementById('metric-cards').innerHTML = 
+            (geoMode === 'country' 
+              ? '<div class="no-metrics">Please select a country to view metrics</div>'
+              : '<div class="no-metrics">Please select a county to view metrics</div>');
+        }
+      });
+
+      // View toggle event
+      const viewToggle = document.getElementById('toggle-view');
+      if (viewToggle) {
+        viewToggle.addEventListener('change', function() {
+          const pctContainer = document.getElementById('percentile-scroll-container');
+          const idContainer = document.getElementById('country-identifier-container');
+          viewMode = this.value;
+          if (this.value === 'identifier') {
+            pctContainer.classList.add('hidden');
+            idContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Location Identifier View';
+            renderIdentifierMetricList();
+            const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBeeswarm(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (this.value === 'category') {
+            pctContainer.classList.add('hidden');
+            idContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Category Slider View';
+            renderCategoryMetricList();
+            const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBeeswarmCategory(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (this.value === 'category-v2') {
+            pctContainer.classList.add('hidden');
+            idContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Category Slider V2';
+            renderCategoryMetricListV2();
+            const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBeeswarmCategory(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (this.value === 'category-v3') {
+            pctContainer.classList.add('hidden');
+            idContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Category Slider V3';
+            renderCategoryMetricListV3();
+            const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBeeswarmCategoryV3(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+        } else if (this.value === 'box') {
+          pctContainer.classList.add('hidden');
+          idContainer.classList.remove('hidden');
+          document.getElementById('app-title').textContent = 'Box and Whisker View';
+          renderCategoryMetricListBox();
+          const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
+          if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+            renderBoxPlotCategory(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else {
+            idContainer.classList.add('hidden');
+            pctContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Percentile Scroll';
+            if (scroller && typeof scroller.resize === 'function') {
+              scroller.resize();
+            }
+          }
+        });
+      }
+    }
+    
+    // Format metric names for display
+    function formatMetricName(metric) {
+      return metric
+        .replace(/_/g, ' ')
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/([0-9]+)/g, ' $1 ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\b\w/g, l => l.toUpperCase());
+    }
+    
+    // Color interpolation function for percentile-based gradient
+    function getPercentileColor(percentile) {
+      // Handle missing percentiles (return neutral gray)
+      if (percentile < 0 || percentile > 100) {
+        return '#888888';
+      }
+      
+      // Define color stops: blue (0%) -> white (50%) -> orange (100%)
+      const blue = { r: 59, g: 130, b: 246 };   // #3b82f6
+      const white = { r: 255, g: 255, b: 255 }; // #ffffff
+      const orange = { r: 249, g: 115, b: 22 }; // #f97316
+      
+      let color1, color2, ratio;
+      
+      if (percentile <= 50) {
+        // Interpolate between blue and white (0% to 50%)
+        color1 = blue;
+        color2 = white;
+        ratio = percentile / 50;
+      } else {
+        // Interpolate between white and orange (50% to 100%)
+        color1 = white;
+        color2 = orange;
+        ratio = (percentile - 50) / 50;
+      }
+      
+      // Linear interpolation
+      const r = Math.round(color1.r + (color2.r - color1.r) * ratio);
+      const g = Math.round(color1.g + (color2.g - color1.g) * ratio);
+      const b = Math.round(color1.b + (color2.b - color1.b) * ratio);
+      
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+    
+    // Create gradient stops for CSS gradient based on percentile distribution
+    function createPercentileGradient(percentiles) {
+      if (!percentiles || percentiles.length === 0) return '';
+      
+      // Sort percentiles to get ordered distribution
+      const sortedPercents = percentiles.slice().sort((a, b) => b - a); // Sort descending (high to low)
+      const gradientStops = [];
+      
+      sortedPercents.forEach((percent, index) => {
+        // Calculate position (0 to 1) based on sorted order
+        const position = percentiles.length > 1 ? index / (percentiles.length - 1) : 0;
+        const color = getPercentileColor(percent);
+        gradientStops.push(`${color} ${Math.round(position * 100)}%`);
+      });
+      
+      return `linear-gradient(to bottom, ${gradientStops.join(', ')})`;
+    }
+    
+    // Calculate percentiles for a selected entity
+    function calculatePercentiles(entityLabel) {
+      let entityData = null;
+      if (geoMode === 'country') {
+        entityData = jsonData.find(d => d.Country === entityLabel);
+      } else {
+        entityData = jsonData.find(d => {
+          const label = d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`;
+          return label === entityLabel;
+        });
+      }
+      if (!entityData) return;
+      
+      // Get all metrics (skip identifier columns)
+      const idCols = geoMode === 'country' ? ['Country'] : ['County', 'State', '__displayName'];
+      const metrics = Object.keys(entityData).filter(key => !idCols.includes(key));
+      
+      // Calculate percentile for each metric
+      currentPercentiles = {};
+      
+      metrics.forEach(metric => {
+        // Skip missing values
+        if (entityData[metric] === '..' || entityData[metric] === undefined || entityData[metric] === null) {
+          return;
+        }
+        
+        const value = typeof entityData[metric] === 'number' ? entityData[metric] : parseFloat(entityData[metric]);
+        if (isNaN(value)) return;
+        
+        // Get all valid numeric values for this metric across all entities
+        const validValues = jsonData
+          .filter(d => d[metric] !== '..' && d[metric] !== undefined && d[metric] !== null)
+          .map(d => (typeof d[metric] === 'number' ? d[metric] : parseFloat(d[metric])))
+          .filter(v => !isNaN(v));
+        
+        if (validValues.length < 3) return; // Need at least 3 observations for comparison
+        
+        // Sort values
+        validValues.sort((a, b) => a - b);
+        
+        // Calculate percentile rank
+        const smaller = validValues.filter(v => v < value).length;
+        const equal = validValues.filter(v => v === value).length;
+        const percentile = Math.round((smaller + 0.5 * equal) / validValues.length * 100);
+        
+        currentPercentiles[metric] = {
+          value,
+          percentile
+        };
+      });
+    }
+    
+    // Update selected entity display
+    function updateCountryInfo() {
+      document.getElementById('country-name').textContent = selectedCountry;
+    }
+    
+    // Find metrics closest to a given percentile
+    function findClosestMetrics(targetPercentile, tolerance = 5) {
+      if (Object.keys(currentPercentiles).length === 0) return [];
+      
+      // Convert target to number
+      const target = parseInt(targetPercentile);
+      
+      // 1. First pass: Find the absolute closest metric regardless of tolerance
+      const entries = Object.entries(currentPercentiles);
+      let closest = entries[0];
+      let minDiff = Math.abs(closest[1].percentile - target);
+      
+      for (let i = 1; i < entries.length; i++) {
+        const diff = Math.abs(entries[i][1].percentile - target);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = entries[i];
+        }
+      }
+      
+      // 2. Now find all metrics within the tolerance of the closest
+      // We use the min difference as our reference point
+      const closestDiff = minDiff;
+      
+      // If the closest is within our tolerance, use the tolerance
+      // Otherwise, use the closest diff + 1 to ensure we get at least one result
+      const effectiveTolerance = closestDiff <= tolerance ? tolerance : closestDiff + 1;
+      
+      const matches = entries.filter(([_, data]) => 
+        Math.abs(data.percentile - target) <= effectiveTolerance
+      );
+      
+      // Sort by how close they are to the target percentile
+      matches.sort((a, b) => 
+        Math.abs(a[1].percentile - target) - Math.abs(b[1].percentile - target)
+      );
+      
+      return matches.map(([metric, data]) => ({
+        metric,
+        value: data.value,
+        percentile: data.percentile,
+        diff: Math.abs(data.percentile - target)
+      }));
+    }
+
+    // Build list of numeric metrics for Identifier View
+    function getNumericMetrics() {
+      if (!jsonData || jsonData.length === 0) return [];
+      const sample = jsonData[0];
+      const idCols = geoMode === 'country' ? ['Country'] : ['County', 'State', '__displayName'];
+      const keys = Object.keys(sample).filter(k => !idCols.includes(k));
+      const numericMetrics = keys.filter(key => {
+        return jsonData.some(d => d[key] !== '..' && d[key] !== undefined && d[key] !== null && !isNaN(parseFloat(d[key])));
+      });
+      return numericMetrics;
+    }
+
+    function renderIdentifierMetricList() {
+      const listEl = document.getElementById('indicator-list');
+      if (!listEl) return;
+      const metrics = getNumericMetrics();
+      listEl.innerHTML = '';
+      metrics.forEach(metricKey => {
+        const btn = document.createElement('button');
+        btn.className = 'indicator-item';
+        btn.textContent = formatMetricName(metricKey);
+        btn.dataset.metricKey = metricKey;
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.indicator-item').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          renderBeeswarm(metricKey);
+        });
+        listEl.appendChild(btn);
+      });
+    }
+
+    // Render metric list sorted by selected country's percentile and display that percentile
+    function renderCategoryMetricList() {
+      const listEl = document.getElementById('indicator-list');
+      if (!listEl) return;
+      const metrics = getNumericMetrics();
+      listEl.innerHTML = '';
+      // Ensure currentPercentiles is computed
+      if (selectedCountry) {
+        calculatePercentiles(selectedCountry);
+      }
+      const decorated = metrics.map(m => ({
+        key: m,
+        pct: (currentPercentiles[m] && typeof currentPercentiles[m].percentile === 'number') ? currentPercentiles[m].percentile : -1
+      }));
+      // Sort descending by percentile; unknowns go to bottom
+      decorated.sort((a, b) => b.pct - a.pct);
+      // Build slider layout
+      const wrapper = document.createElement('div');
+      wrapper.className = 'category-slider';
+      const labelsCol = document.createElement('div');
+      labelsCol.className = 'category-labels';
+      const railCol = document.createElement('div');
+      railCol.className = 'category-rail';
+      const track = document.createElement('div');
+      track.className = 'category-rail-track';
+      const handle = document.createElement('div');
+      handle.className = 'category-handle';
+      track.appendChild(handle);
+      railCol.appendChild(track);
+
+      decorated.forEach(({ key, pct }) => {
+        const item = document.createElement('div');
+        item.className = 'category-label';
+        item.dataset.metricKey = key;
+        item.dataset.percentile = pct >= 0 ? pct : -1;
+        const pctText = pct >= 0 ? ` — ${pct}%` : '';
+        item.textContent = `${formatMetricName(key)}${pctText}`;
+        labelsCol.appendChild(item);
+      });
+
+      wrapper.appendChild(labelsCol);
+      wrapper.appendChild(railCol);
+      listEl.appendChild(wrapper);
+
+      // Measure and build snap points after DOM paints
+      requestAnimationFrame(() => {
+        // Track height equals the visible labels column height
+        track.style.height = labelsCol.clientHeight + 'px';
+
+        const labelNodes = Array.from(labelsCol.querySelectorAll('.category-label'));
+        
+        // Position labels based on percentile values with buffering to prevent overlaps
+        const containerHeight = labelsCol.clientHeight;
+        const minLabelHeight = 9; // Minimum space needed for each label
+        const labelPadding = 2; // Additional padding between labels
+        const minSpacing = minLabelHeight + labelPadding;
+        
+        // Create array of label data with initial positions
+        const labelData = labelNodes.map(node => {
+          const percentile = parseFloat(node.dataset.percentile);
+          const idealPosition = percentile >= 0 
+            ? containerHeight * (1 - percentile / 100)
+            : containerHeight - 20;
+          return {
+            node,
+            percentile,
+            idealPosition,
+            actualPosition: idealPosition
+          };
+        });
+        
+        // Sort by percentile (descending) to maintain order from top to bottom
+        labelData.sort((a, b) => b.percentile - a.percentile);
+        
+        // Apply buffering algorithm to prevent overlaps with bottom crowding handling
+        for (let i = 1; i < labelData.length; i++) {
+          const current = labelData[i];
+          const above = labelData[i - 1];
+          
+          // If current label would overlap with the one above, push it down
+          if (current.actualPosition < above.actualPosition + minSpacing) {
+            current.actualPosition = above.actualPosition + minSpacing;
+          }
+        }
+        
+        // Handle bottom crowding by redistributing labels that would go beyond bounds
+        const maxPosition = containerHeight - minLabelHeight;
+        const overflowLabels = labelData.filter(data => data.actualPosition > maxPosition);
+        
+        if (overflowLabels.length > 0) {
+          // Find the first label that starts the overflow
+          const firstOverflowIndex = labelData.findIndex(data => data.actualPosition > maxPosition);
+          const labelsToRedistribute = labelData.slice(firstOverflowIndex);
+          
+          if (labelsToRedistribute.length > 0) {
+            // Calculate available space for redistribution
+            const startPosition = firstOverflowIndex > 0 ? labelData[firstOverflowIndex - 1].actualPosition + minSpacing : 0;
+            const availableSpace = maxPosition - startPosition;
+            const neededSpace = (labelsToRedistribute.length - 1) * minSpacing;
+            
+            if (availableSpace >= neededSpace) {
+              // Redistribute evenly in available space
+              labelsToRedistribute.forEach((data, i) => {
+                data.actualPosition = startPosition + (i * minSpacing);
+              });
+            } else {
+              // Not enough space - use minimum spacing and clamp to bounds
+              labelsToRedistribute.forEach((data, i) => {
+                data.actualPosition = Math.min(startPosition + (i * minSpacing), maxPosition);
+              });
+            }
+          }
+        }
+        
+        // Final bounds check
+        labelData.forEach(data => {
+          data.actualPosition = Math.max(0, Math.min(data.actualPosition, maxPosition));
+        });
+        
+        // Apply the calculated positions
+        labelData.forEach(data => {
+          data.node.style.top = data.actualPosition + 'px';
+        });
+
+        const computeSnapPoints = () => {
+          // Use the actual positions from the DOM since we've applied buffering
+          categorySnapPoints = labelNodes.map(node => {
+            return parseFloat(node.style.top) || 0;
+          });
+        };
+        computeSnapPoints();
+
+        // Apply color ramp to slider track based on percentiles
+        const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
+        const gradient = createPercentileGradient(percentiles);
+        track.style.background = gradient;
+
+        // Select initial metric
+        const defaultIdx = Math.max(0, categorySelectedMetricKey ? labelNodes.findIndex(n => n.dataset.metricKey === categorySelectedMetricKey) : 0);
+        selectCategoryIndex(defaultIdx, { render: true });
+
+        // Label click -> snap
+        labelNodes.forEach((node, idx) => {
+          node.addEventListener('click', () => selectCategoryIndex(idx, { render: true }));
+        });
+
+        // Drag interactions
+        let dragging = false;
+        const onPointerMove = (evt) => {
+          evt.preventDefault(); // avoid page scroll during drag
+          if (!dragging) return;
+          const trackRect = track.getBoundingClientRect();
+          const y = evt.clientY - trackRect.top;
+          // Find nearest snap point
+          let nearestIdx = 0;
+          let minDist = Infinity;
+          categorySnapPoints.forEach((p, i) => {
+            const d = Math.abs(p - y);
+            if (d < minDist) { minDist = d; nearestIdx = i; }
+          });
+          selectCategoryIndex(nearestIdx, { render: true });
+        };
+        const onPointerUp = () => {
+          dragging = false;
+          document.removeEventListener('pointermove', onPointerMove);
+          document.removeEventListener('pointerup', onPointerUp);
+        };
+        handle.addEventListener('pointerdown', (evt) => {
+          evt.preventDefault();
+          dragging = true;
+          document.addEventListener('pointermove', onPointerMove);
+          document.addEventListener('pointerup', onPointerUp);
+        });
+        // Clicking on track also snaps
+        track.addEventListener('pointerdown', (evt) => {
+          const trackRect = track.getBoundingClientRect();
+          const y = evt.clientY - trackRect.top;
+          let nearestIdx = 0;
+          let minDist = Infinity;
+          categorySnapPoints.forEach((p, i) => {
+            const d = Math.abs(p - y);
+            if (d < minDist) { minDist = d; nearestIdx = i; }
+          });
+          selectCategoryIndex(nearestIdx, { render: true });
+        });
+
+        // Keep rail and handle in sync when the labels list scrolls or resizes
+        const updatePositionsAndSnapPoints = () => {
+          const newContainerHeight = labelsCol.clientHeight;
+          track.style.height = newContainerHeight + 'px';
+          
+          // Reposition labels with buffering logic
+          const minLabelHeight = 6;
+          const labelPadding = 2;
+          const minSpacing = minLabelHeight + labelPadding;
+          
+          const labelData = labelNodes.map(node => {
+            const percentile = parseFloat(node.dataset.percentile);
+            const idealPosition = percentile >= 0 
+              ? newContainerHeight * (1 - percentile / 100)
+              : newContainerHeight - 20;
+            return {
+              node,
+              percentile,
+              idealPosition,
+              actualPosition: idealPosition
+            };
+          });
+          
+          labelData.sort((a, b) => b.percentile - a.percentile);
+          
+          // Apply buffering algorithm to prevent overlaps with bottom crowding handling
+          for (let i = 1; i < labelData.length; i++) {
+            const current = labelData[i];
+            const above = labelData[i - 1];
+            
+            if (current.actualPosition < above.actualPosition + minSpacing) {
+              current.actualPosition = above.actualPosition + minSpacing;
+            }
+          }
+          
+          // Handle bottom crowding by redistributing labels that would go beyond bounds
+          const maxPosition = newContainerHeight - minLabelHeight;
+          const overflowLabels = labelData.filter(data => data.actualPosition > maxPosition);
+          
+          if (overflowLabels.length > 0) {
+            // Find the first label that starts the overflow
+            const firstOverflowIndex = labelData.findIndex(data => data.actualPosition > maxPosition);
+            const labelsToRedistribute = labelData.slice(firstOverflowIndex);
+            
+            if (labelsToRedistribute.length > 0) {
+              // Calculate available space for redistribution
+              const startPosition = firstOverflowIndex > 0 ? labelData[firstOverflowIndex - 1].actualPosition + minSpacing : 0;
+              const availableSpace = maxPosition - startPosition;
+              const neededSpace = (labelsToRedistribute.length - 1) * minSpacing;
+              
+              if (availableSpace >= neededSpace) {
+                // Redistribute evenly in available space
+                labelsToRedistribute.forEach((data, i) => {
+                  data.actualPosition = startPosition + (i * minSpacing);
+                });
+              } else {
+                // Not enough space - use minimum spacing and clamp to bounds
+                labelsToRedistribute.forEach((data, i) => {
+                  data.actualPosition = Math.min(startPosition + (i * minSpacing), maxPosition);
+                });
+              }
+            }
+          }
+          
+          // Apply positions with final bounds check
+          labelData.forEach(data => {
+            data.actualPosition = Math.max(0, Math.min(data.actualPosition, maxPosition));
+            data.node.style.top = data.actualPosition + 'px';
+          });
+          
+          computeSnapPoints();
+          
+          // Reapply color ramp on resize
+          const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
+          const gradient = createPercentileGradient(percentiles);
+          track.style.background = gradient;
+          
+          const active = listEl.querySelector('.category-label.active');
+          if (active) {
+            const labels = Array.from(listEl.querySelectorAll('.category-label'));
+            const idx = labels.indexOf(active);
+            if (idx >= 0 && categorySnapPoints[idx] != null) {
+              handle.style.top = categorySnapPoints[idx] + 'px';
+            }
+          }
+        };
+
+        labelsCol.addEventListener('scroll', updatePositionsAndSnapPoints);
+        window.addEventListener('resize', updatePositionsAndSnapPoints);
+      });
+      
+      // Helper to set active, move handle, and render
+      function selectCategoryIndex(index, opts = {}) {
+        const { render = true } = opts;
+        const labels = Array.from(listEl.querySelectorAll('.category-label'));
+        if (index < 0 || index >= labels.length) return;
+        labels.forEach(l => l.classList.remove('active'));
+        const selected = labels[index];
+        selected.classList.add('active');
+        // Scroll behavior not needed with absolute positioning based on percentiles
+        const metricKey = selected.dataset.metricKey;
+        categorySelectedMetricKey = metricKey;
+        // Move handle to snap point
+        if (categorySnapPoints && categorySnapPoints[index] != null) {
+          handle.style.top = categorySnapPoints[index] + 'px';
+        }
+        if (render) {
+          renderBeeswarmCategory(metricKey);
+        }
+      }
+    }
+
+     // Render metric list with evenly spaced labels (Category Slider V2)
+     function renderCategoryMetricListV2() {
+       const listEl = document.getElementById('indicator-list');
+       if (!listEl) return;
+       const metrics = getNumericMetrics();
+       listEl.innerHTML = '';
+       // Ensure currentPercentiles is computed
+       if (selectedCountry) {
+         calculatePercentiles(selectedCountry);
+       }
+       const decorated = metrics.map(m => ({
+         key: m,
+         pct: (currentPercentiles[m] && typeof currentPercentiles[m].percentile === 'number') ? currentPercentiles[m].percentile : -1
+       }));
+       // Sort descending by percentile; unknowns go to bottom
+       decorated.sort((a, b) => b.pct - a.pct);
+       // Build slider layout
+       const wrapper = document.createElement('div');
+       wrapper.className = 'category-slider';
+       const labelsCol = document.createElement('div');
+       labelsCol.className = 'category-labels';
+       const railCol = document.createElement('div');
+       railCol.className = 'category-rail';
+       const track = document.createElement('div');
+       track.className = 'category-rail-track';
+       const handle = document.createElement('div');
+       handle.className = 'category-handle';
+      track.appendChild(handle);
+      railCol.appendChild(track);
+
+      decorated.forEach(({ key, pct }) => {
+        const item = document.createElement('div');
+        item.className = 'category-label';
+        item.dataset.metricKey = key;
+        item.dataset.percentile = pct >= 0 ? pct : -1;
+        
+        // Create structured content with right-justified bold percentile
+        const metricName = document.createElement('span');
+        metricName.textContent = formatMetricName(key);
+        
+        const percentileSpan = document.createElement('span');
+        percentileSpan.style.cssText = 'float: right; font-weight: bold; color: #000000;';
+        percentileSpan.textContent = pct >= 0 ? `${pct}%` : '';
+        
+        item.appendChild(metricName);
+        item.appendChild(percentileSpan);
+        labelsCol.appendChild(item);
+      });
+
+      wrapper.appendChild(labelsCol);
+      wrapper.appendChild(railCol);
+      listEl.appendChild(wrapper);
+
+      // Measure and build snap points after DOM paints
+      requestAnimationFrame(() => {
+        // Track height equals the visible labels column height
+        track.style.height = labelsCol.clientHeight + 'px';
+
+        const labelNodes = Array.from(labelsCol.querySelectorAll('.category-label'));
+        
+        // Position labels evenly spaced instead of based on percentiles
+        const containerHeight = labelsCol.clientHeight;
+        const labelCount = labelNodes.length;
+        
+        // Calculate even spacing
+        const totalPadding = 20; // Top and bottom padding
+        const availableHeight = containerHeight - totalPadding;
+        const spacing = labelCount > 1 ? availableHeight / (labelCount - 1) : 0;
+        
+        // Position labels evenly
+        labelNodes.forEach((node, index) => {
+          const position = totalPadding / 2 + (index * spacing);
+          node.style.top = position + 'px';
+        });
+
+        const computeSnapPoints = () => {
+          // Use the evenly spaced positions
+          categorySnapPoints = labelNodes.map(node => {
+            return parseFloat(node.style.top) || 0;
+          });
+        };
+        computeSnapPoints();
+
+        // Apply color ramp to slider track based on percentiles
+        const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
+        const gradient = createPercentileGradient(percentiles);
+        track.style.background = gradient;
+
+        // Select initial metric
+        const defaultIdx = Math.max(0, categorySelectedMetricKey ? labelNodes.findIndex(n => n.dataset.metricKey === categorySelectedMetricKey) : 0);
+        selectCategoryIndexV2(defaultIdx, { render: true });
+
+        // Label click -> snap
+        labelNodes.forEach((node, idx) => {
+          node.addEventListener('click', () => selectCategoryIndexV2(idx, { render: true }));
+        });
+
+        // Drag interactions
+        let dragging = false;
+        const onPointerMove = (evt) => {
+          evt.preventDefault(); // avoid page scroll during drag
+          if (!dragging) return;
+          const trackRect = track.getBoundingClientRect();
+          const y = evt.clientY - trackRect.top;
+          // Find nearest snap point
+          let nearestIdx = 0;
+          let minDist = Infinity;
+          categorySnapPoints.forEach((p, i) => {
+            const d = Math.abs(p - y);
+            if (d < minDist) { minDist = d; nearestIdx = i; }
+          });
+          selectCategoryIndexV2(nearestIdx, { render: true });
+        };
+        const onPointerUp = () => {
+          dragging = false;
+          document.removeEventListener('pointermove', onPointerMove);
+          document.removeEventListener('pointerup', onPointerUp);
+        };
+        handle.addEventListener('pointerdown', (evt) => {
+          evt.preventDefault();
+          dragging = true;
+          document.addEventListener('pointermove', onPointerMove);
+          document.addEventListener('pointerup', onPointerUp);
+        });
+        // Clicking on track also snaps
+        track.addEventListener('pointerdown', (evt) => {
+          const trackRect = track.getBoundingClientRect();
+          const y = evt.clientY - trackRect.top;
+          let nearestIdx = 0;
+          let minDist = Infinity;
+          categorySnapPoints.forEach((p, i) => {
+            const d = Math.abs(p - y);
+            if (d < minDist) { minDist = d; nearestIdx = i; }
+          });
+          selectCategoryIndexV2(nearestIdx, { render: true });
+        });
+
+        // Keep rail and handle in sync when the labels list scrolls or resizes
+        const updatePositionsAndSnapPoints = () => {
+          const newContainerHeight = labelsCol.clientHeight;
+          track.style.height = newContainerHeight + 'px';
+          
+          // Reposition labels evenly
+          const totalPadding = 20;
+          const availableHeight = newContainerHeight - totalPadding;
+          const spacing = labelCount > 1 ? availableHeight / (labelCount - 1) : 0;
+          
+          labelNodes.forEach((node, index) => {
+            const position = totalPadding / 2 + (index * spacing);
+            node.style.top = position + 'px';
+          });
+          
+          computeSnapPoints();
+          
+          // Reapply color ramp on resize
+          const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
+          const gradient = createPercentileGradient(percentiles);
+          track.style.background = gradient;
+          
+          const active = listEl.querySelector('.category-label.active');
+          if (active) {
+            const labels = Array.from(listEl.querySelectorAll('.category-label'));
+            const idx = labels.indexOf(active);
+            if (idx >= 0 && categorySnapPoints[idx] != null) {
+              handle.style.top = categorySnapPoints[idx] + 'px';
+            }
+          }
+        };
+
+        labelsCol.addEventListener('scroll', updatePositionsAndSnapPoints);
+        window.addEventListener('resize', updatePositionsAndSnapPoints);
+      });
+      
+      // Helper to set active, move handle, and render
+      function selectCategoryIndexV2(index, opts = {}) {
+        const { render = true } = opts;
+        const labels = Array.from(listEl.querySelectorAll('.category-label'));
+        if (index < 0 || index >= labels.length) return;
+        labels.forEach(l => l.classList.remove('active'));
+        const selected = labels[index];
+        selected.classList.add('active');
+        const metricKey = selected.dataset.metricKey;
+        categorySelectedMetricKey = metricKey;
+        // Move handle to snap point
+        if (categorySnapPoints && categorySnapPoints[index] != null) {
+          handle.style.top = categorySnapPoints[index] + 'px';
+        }
+        if (render) {
+          renderBeeswarmCategory(metricKey);
+        }
+      }
+    }
+
+     function renderCategoryMetricListV3() {
+       const listEl = document.getElementById('indicator-list');
+       if (!listEl) return;
+       const metrics = getNumericMetrics();
+       listEl.innerHTML = '';
+       // Ensure currentPercentiles is computed
+       if (selectedCountry) {
+         calculatePercentiles(selectedCountry);
+       }
+       const decorated = metrics.map(m => ({
+         key: m,
+         pct: (currentPercentiles[m] && typeof currentPercentiles[m].percentile === 'number') ? currentPercentiles[m].percentile : -1
+       }));
+       // Sort descending by percentile; unknowns go to bottom
+       decorated.sort((a, b) => b.pct - a.pct);
+       // Build slider layout
+       const wrapper = document.createElement('div');
+       wrapper.className = 'category-slider';
+       const labelsCol = document.createElement('div');
+       labelsCol.className = 'category-labels';
+       const railCol = document.createElement('div');
+       railCol.className = 'category-rail';
+       const track = document.createElement('div');
+       track.className = 'category-rail-track';
+       const handle = document.createElement('div');
+       handle.className = 'category-handle';
+      track.appendChild(handle);
+      railCol.appendChild(track);
+
+      decorated.forEach(({ key, pct }) => {
+        const item = document.createElement('div');
+        item.className = 'category-label';
+        item.dataset.metricKey = key;
+        item.dataset.percentile = pct >= 0 ? pct : -1;
+        
+        // Create structured content with right-justified bold percentile
+        const metricName = document.createElement('span');
+        metricName.textContent = formatMetricName(key);
+        
+        const percentileSpan = document.createElement('span');
+        percentileSpan.style.cssText = 'float: right; font-weight: bold; color: #000000;';
+        percentileSpan.textContent = pct >= 0 ? `${pct}%` : '';
+        
+        item.appendChild(metricName);
+        item.appendChild(percentileSpan);
+        labelsCol.appendChild(item);
+      });
+
+      wrapper.appendChild(labelsCol);
+      wrapper.appendChild(railCol);
+      listEl.appendChild(wrapper);
+
+      // Measure and build snap points after DOM paints
+      requestAnimationFrame(() => {
+        // Track height equals the visible labels column height
+        track.style.height = labelsCol.clientHeight + 'px';
+
+        const labelNodes = Array.from(labelsCol.querySelectorAll('.category-label'));
+        
+        // Position labels evenly spaced instead of based on percentiles
+        const containerHeight = labelsCol.clientHeight;
+        const labelCount = labelNodes.length;
+        
+        // Calculate even spacing
+        const totalPadding = 20; // Top and bottom padding
+        const availableHeight = containerHeight - totalPadding;
+        const spacing = labelCount > 1 ? availableHeight / (labelCount - 1) : 0;
+        
+        // Position labels evenly
+        labelNodes.forEach((node, index) => {
+          const position = totalPadding / 2 + (index * spacing);
+          node.style.top = position + 'px';
+        });
+
+        const computeSnapPoints = () => {
+          // Use the evenly spaced positions
+          categorySnapPoints = labelNodes.map(node => {
+            return parseFloat(node.style.top) || 0;
+          });
+        };
+        computeSnapPoints();
+
+        // Apply color ramp to slider track based on percentiles
+        const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
+        const gradient = createPercentileGradient(percentiles);
+        track.style.background = gradient;
+
+        // Select initial metric
+        const defaultIdx = Math.max(0, categorySelectedMetricKey ? labelNodes.findIndex(n => n.dataset.metricKey === categorySelectedMetricKey) : 0);
+        selectCategoryIndexV3(defaultIdx, { render: true });
+
+        // Label click -> snap
+        labelNodes.forEach((node, idx) => {
+          node.addEventListener('click', () => selectCategoryIndexV3(idx, { render: true }));
+        });
+
+        // Drag interactions
+        let dragging = false;
+        const onPointerMove = (evt) => {
+          evt.preventDefault(); // avoid page scroll during drag
+          if (!dragging) return;
+          const trackRect = track.getBoundingClientRect();
+          const y = evt.clientY - trackRect.top;
+          // Find nearest snap point
+          let nearestIdx = 0;
+          let minDist = Infinity;
+          categorySnapPoints.forEach((p, i) => {
+            const d = Math.abs(p - y);
+            if (d < minDist) { minDist = d; nearestIdx = i; }
+          });
+          selectCategoryIndexV3(nearestIdx, { render: true });
+        };
+        const onPointerUp = () => {
+          dragging = false;
+          document.removeEventListener('pointermove', onPointerMove);
+          document.removeEventListener('pointerup', onPointerUp);
+        };
+        handle.addEventListener('pointerdown', (evt) => {
+          evt.preventDefault();
+          dragging = true;
+          document.addEventListener('pointermove', onPointerMove);
+          document.addEventListener('pointerup', onPointerUp);
+        });
+        // Clicking on track also snaps
+        track.addEventListener('pointerdown', (evt) => {
+          const trackRect = track.getBoundingClientRect();
+          const y = evt.clientY - trackRect.top;
+          let nearestIdx = 0;
+          let minDist = Infinity;
+          categorySnapPoints.forEach((p, i) => {
+            const d = Math.abs(p - y);
+            if (d < minDist) { minDist = d; nearestIdx = i; }
+          });
+          selectCategoryIndexV3(nearestIdx, { render: true });
+        });
+
+        // Keep rail and handle in sync when the labels list scrolls or resizes
+        const updatePositionsAndSnapPoints = () => {
+          const newContainerHeight = labelsCol.clientHeight;
+          track.style.height = newContainerHeight + 'px';
+          
+          // Reposition labels evenly
+          const totalPadding = 20;
+          const availableHeight = newContainerHeight - totalPadding;
+          const spacing = labelCount > 1 ? availableHeight / (labelCount - 1) : 0;
+          
+          labelNodes.forEach((node, index) => {
+            const position = totalPadding / 2 + (index * spacing);
+            node.style.top = position + 'px';
+          });
+          
+          computeSnapPoints();
+          
+          // Reapply color ramp on resize
+          const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
+          const gradient = createPercentileGradient(percentiles);
+          track.style.background = gradient;
+          
+          const active = listEl.querySelector('.category-label.active');
+          if (active) {
+            const labels = Array.from(listEl.querySelectorAll('.category-label'));
+            const idx = labels.indexOf(active);
+            if (idx >= 0 && categorySnapPoints[idx] != null) {
+              handle.style.top = categorySnapPoints[idx] + 'px';
+            }
+          }
+        };
+
+        labelsCol.addEventListener('scroll', updatePositionsAndSnapPoints);
+        window.addEventListener('resize', updatePositionsAndSnapPoints);
+      });
+      
+      // Helper to set active, move handle, and render
+      function selectCategoryIndexV3(index, opts = {}) {
+        const { render = true } = opts;
+        const labels = Array.from(listEl.querySelectorAll('.category-label'));
+        if (index < 0 || index >= labels.length) return;
+        labels.forEach(l => l.classList.remove('active'));
+        const selected = labels[index];
+        selected.classList.add('active');
+        const metricKey = selected.dataset.metricKey;
+        categorySelectedMetricKey = metricKey;
+        // Move handle to snap point
+        if (categorySnapPoints && categorySnapPoints[index] != null) {
+          handle.style.top = categorySnapPoints[index] + 'px';
+        }
+        if (render) {
+          renderBeeswarmCategoryV3(metricKey);
+        }
+      }
+    }
+
+    // Render beeswarm chart for selected metric
+    function renderBeeswarm(metricKey) {
+      const svg = d3.select('#beeswarm-svg');
+      const container = document.querySelector('.beeswarm-panel');
+      if (!svg.node() || !container) return;
+
+      // Use a constant plot width to avoid layout-dependent overflow
+      const width = 800;
+      const height = container.clientHeight || 400;
+      svg.attr('width', width).attr('height', height).style('width', width + 'px');
+
+      const values = jsonData
+        .map(d => {
+          const raw = d[metricKey];
+          const v = typeof raw === 'number' ? raw : parseFloat(raw);
+          if (raw === '..' || raw === undefined || raw === null || isNaN(v)) return null;
+          const label = geoMode === 'country' ? d.Country : (d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`);
+          return { label, value: v };
+        })
+        .filter(Boolean);
+
+      if (values.length === 0) {
+        svg.selectAll('*').remove();
+        return;
+      }
+
+      const sortedVals = values.map(v => v.value).slice().sort((a, b) => a - b);
+      const withPct = values.map(d => {
+        const smaller = sortedVals.filter(v => v < d.value).length;
+        const equal = sortedVals.filter(v => v === d.value).length;
+        const percentile = Math.round((smaller + 0.5 * equal) / sortedVals.length * 100);
+        return { ...d, percentile };
+      });
+
+      // X scale over raw values (not percentile)
+      const extent = d3.extent(sortedVals);
+      const plotPaddingLeft = 40;
+      const plotPaddingRight = 20;
+      const plotPaddingTop = 10;
+      const plotPaddingBottom = 35;
+      const x = d3.scaleLinear().domain(extent).nice().range([plotPaddingLeft, width - plotPaddingRight]);
+      const yCenter = height / 2;
+
+      svg.selectAll('*').remove();
+      // Frame around plot
+      svg.append('rect')
+        .attr('x', plotPaddingLeft)
+        .attr('y', plotPaddingTop)
+        .attr('width', (width - plotPaddingRight) - plotPaddingLeft)
+        .attr('height', (height - plotPaddingBottom) - plotPaddingTop)
+        .attr('fill', 'none')
+        .attr('stroke', '#cbd5e1')
+        .attr('stroke-width', 1);
+
+      const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
+      const axis = d3.axisBottom(x).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
+      const axisG = svg.append('g').attr('transform', `translate(0, ${height - 30})`).call(axis);
+      axisG.selectAll('text').style('font-size', '10px');
+
+      // Vertical guides at each 10th percentile (10..90)
+      for (let p = 10; p < 100; p += 10) {
+        const qVal = d3.quantileSorted(sortedVals, p / 100);
+        if (qVal != null) {
+          const qx = x(qVal);
+          svg.append('line')
+            .attr('x1', qx)
+            .attr('x2', qx)
+            .attr('y1', plotPaddingTop)
+            .attr('y2', height - plotPaddingBottom)
+            .attr('stroke', '#e2e8f0')
+            .attr('stroke-width', 1)
+            .attr('pointer-events', 'none');
+        }
+      }
+
+      const nodes = withPct.map(d => ({
+        x: x(d.value),
+        y: yCenter,
+        r: 4.5,
+        data: d
+      }));
+
+      const simulation = d3.forceSimulation(nodes)
+        .force('x', d3.forceX(d => x(d.data.value)).strength(1))
+        .force('y', d3.forceY(yCenter).strength(0.05))
+        .force('collide', d3.forceCollide(d => d.r + 1.2))
+        .stop();
+
+      for (let i = 0; i < 200; i++) simulation.tick();
+      // Clamp node positions to stay within frame
+      nodes.forEach(n => {
+        n.x = Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, n.x));
+        n.y = Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, n.y));
+      });
+
+      const tooltip = d3.select('#beeswarm-tooltip');
+
+      svg.append('g')
+        .attr('class', 'beeswarm-points')
+        .selectAll('circle')
+        .data(nodes)
+        .enter()
+        .append('circle')
+        .attr('cx', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
+        .attr('cy', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
+        .attr('r', d => d.r)
+        .attr('fill', d => {
+          const label = d.data.label;
+          return label === selectedCountry ? '#e74c3c' : '#3498db';
+        })
+        .attr('opacity', 0.85)
+        .on('mouseenter', function(evt, d) {
+          const html = `${d.data.label}<br>Value: ${formatValue(d.data.value, metricKey)}<br>Percentile: ${d.data.percentile}%`;
+          tooltip.html(html)
+            .classed('hidden', false)
+            .style('top', (evt.offsetY - 28) + 'px');
+          const tipWidth = tooltip.node() ? tooltip.node().offsetWidth : 0;
+          const leftPos = Math.max(0, (evt.offsetX - tipWidth - 12));
+          tooltip.style('left', leftPos + 'px');
+          d3.select(this)
+            .attr('stroke', '#1f6fa5')
+            .attr('stroke-width', 2)
+            .attr('fill', d => (d.data.label === selectedCountry ? '#c0392b' : '#2d86c7'))
+            .attr('r', d.r + 2.5);
+        })
+        .on('mousemove', function(evt) {
+          const tipWidth = tooltip.node() ? tooltip.node().offsetWidth : 0;
+          const leftPos = Math.max(0, (evt.offsetX - tipWidth - 12));
+          tooltip.style('left', leftPos + 'px')
+                 .style('top', (evt.offsetY - 28) + 'px');
+        })
+        .on('mouseleave', function() {
+          tooltip.classed('hidden', true);
+          d3.select(this)
+            .attr('stroke', 'none')
+            .attr('fill', d => (d.data.label === selectedCountry ? '#e74c3c' : '#3498db'))
+            .attr('r', d => d.r);
+        });
+
+      // Hover vertical line and percentile label
+      const hoverLine = svg.append('line')
+        .attr('class', 'hover-line')
+        .attr('y1', plotPaddingTop)
+        .attr('y2', height - plotPaddingBottom)
+        .attr('stroke', '#9aa5b1')
+        .attr('stroke-dasharray', '4 4')
+        .style('display', 'none');
+
+      const hoverLabel = document.getElementById('beeswarm-hover-label');
+
+      // Use SVG-level listeners so points can still receive events
+      svg
+        .on('mouseenter', function() {
+          hoverLine.style('display', null);
+          hoverLabel.classList.remove('hidden');
+        })
+        .on('mousemove', function(evt) {
+          const [mx] = d3.pointer(evt);
+          const clampedX = Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, mx));
+          hoverLine.attr('x1', clampedX).attr('x2', clampedX);
+          const hoveredValue = x.invert(clampedX);
+          // compute percentile at cursor
+          const smaller = sortedVals.filter(v => v < hoveredValue).length;
+          const equal = sortedVals.filter(v => v === hoveredValue).length;
+          const p = Math.round((smaller + 0.5 * equal) / sortedVals.length * 100);
+          hoverLabel.textContent = `Percentile: ${p}%`;
+          const labelWidth = hoverLabel.offsetWidth || 0;
+          const leftLabel = Math.max(0, (clampedX - labelWidth - 10));
+          hoverLabel.style.left = leftLabel + 'px';
+          hoverLabel.style.top = (10) + 'px';
+        })
+        .on('mouseleave', function() {
+          hoverLine.style('display', 'none');
+          hoverLabel.classList.add('hidden');
+        });
+
+      svg.append('text')
+        .attr('x', 40)
+        .attr('y', 20)
+        .attr('fill', '#2c3e50')
+        .attr('font-size', 14)
+        .attr('font-weight', 'bold')
+        .text(formatMetricName(metricKey));
+    }
+
+    // Render beeswarm with axes swapped (value on Y, swarm along X), selected country in red
+    function renderBeeswarmCategory(metricKey) {
+      const svg = d3.select('#beeswarm-svg');
+      const container = document.querySelector('.beeswarm-panel');
+      if (!svg.node() || !container) return;
+
+      const width = 800;
+      const height = container.clientHeight || 400;
+      svg.attr('width', width).attr('height', height).style('width', width + 'px');
+
+      const values = jsonData
+        .map(d => {
+          const raw = d[metricKey];
+          const v = typeof raw === 'number' ? raw : parseFloat(raw);
+          if (raw === '..' || raw === undefined || raw === null || isNaN(v)) return null;
+          const label = geoMode === 'country' ? d.Country : (d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`);
+          return { label, value: v };
+        })
+        .filter(Boolean);
+
+      if (values.length === 0) {
+        svg.selectAll('*').remove();
+        previousBeeswarmNodes = [];
+        return;
+      }
+
+      const sortedVals = values.map(v => v.value).slice().sort((a, b) => a - b);
+      const withPct = values.map(d => {
+        const smaller = sortedVals.filter(v => v < d.value).length;
+        const equal = sortedVals.filter(v => v === d.value).length;
+        const percentile = Math.round((smaller + 0.5 * equal) / sortedVals.length * 100);
+        return { ...d, percentile };
+      });
+
+      const extent = d3.extent(sortedVals);
+      const plotPaddingLeft = 50;
+      const plotPaddingRight = 70; // Increase right padding to make room for right-side percentile labels
+      const plotPaddingTop = 10;
+      const plotPaddingBottom = 40;
+      const y = d3.scaleLinear().domain(extent).nice().range([height - plotPaddingBottom, plotPaddingTop]);
+      const xCenter = (plotPaddingLeft + (width - plotPaddingRight)) / 2;
+
+      // Store existing circles for transition
+      const existingCircles = svg.selectAll('.beeswarm-points circle');
+      const isFirstRender = existingCircles.empty();
+
+      // Clear non-circle elements but keep circles for transition
+      svg.selectAll('*:not(.beeswarm-points):not(.beeswarm-points circle)').remove();
+      // Frame
+      svg.append('rect')
+        .attr('x', plotPaddingLeft)
+        .attr('y', plotPaddingTop)
+        .attr('width', (width - plotPaddingRight) - plotPaddingLeft)
+        .attr('height', (height - plotPaddingBottom) - plotPaddingTop)
+        .attr('fill', 'none')
+        .attr('stroke', '#cbd5e1')
+        .attr('stroke-width', 1);
+
+      const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
+      const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
+      const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
+      axisG.selectAll('text').style('font-size', '10px');
+
+      // Horizontal guides at deciles
+      for (let p = 10; p < 100; p += 10) {
+        const qVal = d3.quantileSorted(sortedVals, p / 100);
+        if (qVal != null) {
+          const qy = y(qVal);
+          svg.append('line')
+            .attr('x1', plotPaddingLeft)
+            .attr('x2', width - plotPaddingRight)
+            .attr('y1', qy)
+            .attr('y2', qy)
+            .attr('stroke', '#e2e8f0')
+            .attr('stroke-width', 1)
+            .attr('pointer-events', 'none');
+          // Right-side percentile labels every 10%
+          svg.append('text')
+            .attr('x', width - plotPaddingRight + 6)
+            .attr('y', qy + 3)
+            .attr('fill', '#475569')
+            .attr('font-size', 10)
+            .text(`${p}%`);
+        }
+      }
+
+      // Also include 0% and 100% labels (and guides)
+      const endpoints = [0, 100];
+      endpoints.forEach(P => {
+        const qVal = d3.quantileSorted(sortedVals, P / 100);
+        if (qVal != null) {
+          const qy = y(qVal);
+          // optional guide line
+          svg.append('line')
+            .attr('x1', plotPaddingLeft)
+            .attr('x2', width - plotPaddingRight)
+            .attr('y1', qy)
+            .attr('y2', qy)
+            .attr('stroke', '#e2e8f0')
+            .attr('stroke-width', 1)
+            .attr('pointer-events', 'none');
+          // label
+          svg.append('text')
+            .attr('x', width - plotPaddingRight + 6)
+            .attr('y', qy + 3)
+            .attr('fill', '#475569')
+            .attr('font-size', 10)
+            .text(`${P}%`);
+        }
+      });
+
+      const nodes = withPct.map(d => ({
+        x: xCenter,
+        y: y(d.value),
+        r: 4.5,
+        data: d
+      }));
+
+      const simulation = d3.forceSimulation(nodes)
+        .force('y', d3.forceY(d => y(d.data.value)).strength(1))
+        .force('x', d3.forceX(xCenter).strength(0.05))
+        .force('collide', d3.forceCollide(d => d.r + 1.2))
+        .stop();
+
+      for (let i = 0; i < 200; i++) simulation.tick();
+      nodes.forEach(n => {
+        n.x = Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, n.x));
+        n.y = Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, n.y));
+      });
+
+      const tooltip = d3.select('#beeswarm-tooltip');
+
+      // Create or update circles with smooth transitions
+      let circleGroup = svg.select('.beeswarm-points');
+      if (circleGroup.empty()) {
+        circleGroup = svg.append('g').attr('class', 'beeswarm-points');
+      }
+
+      // Bind data to circles
+      const circles = circleGroup.selectAll('circle')
+        .data(nodes, d => d.data.label); // Use label as key for object constancy
+
+      // Handle entering circles (new data points)
+      const enteringCircles = circles.enter()
+        .append('circle')
+        .attr('cx', d => {
+          // If we have previous positions for this label, start from there
+          const prev = previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+          return prev ? prev.x : d.x;
+        })
+        .attr('cy', d => {
+          const prev = previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+          return prev ? prev.y : d.y;
+        })
+        .attr('r', d => d.r)
+        .attr('fill', d => (d.data.label === selectedCountry ? '#f1c40f' : '#9b59b6'))
+        .attr('opacity', 0.85);
+
+      // Handle exiting circles (data points that are no longer present)
+      circles.exit().remove();
+
+      // Merge entering and updating circles
+      const allCircles = enteringCircles.merge(circles);
+
+      // Animate to new positions
+      allCircles.transition()
+        .duration(600)
+        .ease(d3.easeQuadOut)
+        .attr('cx', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
+        .attr('cy', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
+        .attr('fill', d => (d.data.label === selectedCountry ? '#f1c40f' : '#9b59b6'));
+
+      // Store current positions for next transition
+      previousBeeswarmNodes = nodes.map(n => ({ ...n }));
+
+      // Add interaction handlers to all circles
+      allCircles
+        .on('mouseenter', function(evt, d) {
+          const html = `${d.data.label}<br>Value: ${formatValue(d.data.value, metricKey)}<br>Percentile: ${d.data.percentile}%`;
+          tooltip.html(html)
+            .classed('hidden', false)
+            .style('left', (evt.offsetX + 32) + 'px') // 20px right from original +12px
+            .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
+          d3.select(this)
+            .attr('stroke', '#1f6fa5')
+            .attr('stroke-width', 2)
+            .attr('fill', d => (d.data.label === selectedCountry ? '#d4ac0d' : '#8e44ad'))
+            .attr('r', d.r + 2.5);
+        })
+        .on('mousemove', function(evt) {
+          tooltip
+            .style('left', (evt.offsetX + 32) + 'px') // 20px right from original +12px
+            .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
+        })
+        .on('click', function(evt, d) {
+          // Click to select region in Category Slider V2
+          const newSelection = d.data.label;
+          if (!newSelection) return;
+          selectedCountry = newSelection;
+          // Sync the dropdown if option exists
+          const selectEl = document.getElementById('countrySelect');
+          if (selectEl) {
+            const exists = Array.from(selectEl.options).some(o => o.value === newSelection);
+            if (exists) selectEl.value = newSelection;
+          }
+          // Recompute and update UI
+          calculatePercentiles(selectedCountry);
+          updateCountryInfo();
+          // Re-render current metric in V2 and refresh labels/gradient
+          renderCategoryMetricListV2();
+          if (categorySelectedMetricKey) {
+            renderBeeswarmCategory(categorySelectedMetricKey);
+          } else if (d && d.data) {
+            // Fallback to re-render current metric key if available in scope
+            renderBeeswarmCategory(metricKey);
+          }
+        })
+        .on('mouseleave', function() {
+          tooltip.classed('hidden', true);
+          d3.select(this)
+            .attr('stroke', 'none')
+            .attr('fill', d => (d.data.label === selectedCountry ? '#f1c40f' : '#9b59b6'))
+            .attr('r', d => d.r);
+        });
+
+      // Hover horizontal line and percentile label
+      const hoverLine = svg.append('line')
+        .attr('class', 'hover-line')
+        .attr('x1', plotPaddingLeft)
+        .attr('x2', width - plotPaddingRight)
+        .attr('stroke', '#9aa5b1')
+        .attr('stroke-dasharray', '4 4')
+        .style('display', 'none');
+
+      const hoverLabel = document.getElementById('beeswarm-hover-label');
+
+      svg
+        .on('mouseenter', function() {
+          hoverLine.style('display', null);
+          hoverLabel.classList.remove('hidden');
+          // Ensure no box styling even if CSS is cached
+          hoverLabel.style.background = 'transparent';
+          hoverLabel.style.border = 'none';
+          hoverLabel.style.padding = '0';
+          hoverLabel.style.borderRadius = '0';
+          hoverLabel.style.fontWeight = 'normal';
+        })
+        .on('mousemove', function(evt) {
+          const [, my] = d3.pointer(evt);
+          const clampedY = Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, my));
+          hoverLine.attr('y1', clampedY).attr('y2', clampedY);
+          const hoveredValue = y.invert(clampedY);
+          const smaller = sortedVals.filter(v => v < hoveredValue).length;
+          const equal = sortedVals.filter(v => v === hoveredValue).length;
+          const p = Math.round((smaller + 0.5 * equal) / sortedVals.length * 100);
+          hoverLabel.textContent = `Percentile: ${p}%`;
+          hoverLabel.style.left = '75px'; // Position on left side near y-axis
+          hoverLabel.style.top = (clampedY - 6) + 'px';
+        })
+        .on('mouseleave', function() {
+          hoverLine.style('display', 'none');
+          hoverLabel.classList.add('hidden');
+        });
+
+      svg.append('text')
+        .attr('x', plotPaddingLeft + 6)
+        .attr('y', 18)
+        .attr('fill', '#2c3e50')
+        .attr('font-size', 14)
+        .attr('font-weight', 'bold')
+        .text(formatMetricName(metricKey));
+    }
+
+    function renderBeeswarmCategoryV3(metricKey) {
+      const svg = d3.select('#beeswarm-svg');
+      const container = document.querySelector('.beeswarm-panel');
+      if (!svg.node() || !container) return;
+
+      const width = 800;
+      const height = container.clientHeight || 400;
+      svg.attr('width', width).attr('height', height).style('width', width + 'px');
+
+      // Check if CountryCode/Continent columns exist
+      const hasCountryCode = jsonData.length > 0 && jsonData[0].hasOwnProperty('CountryCode');
+      const hasContinent = jsonData.length > 0 && jsonData[0].hasOwnProperty('Continent');
+
+      // Ensure V2 dots (circles) do not linger when switching to V3
+      svg.selectAll('.beeswarm-points circle').remove();
+
+      const values = jsonData
+        .map(d => {
+          const raw = d[metricKey];
+          const v = typeof raw === 'number' ? raw : parseFloat(raw);
+          if (raw === '..' || raw === undefined || raw === null || isNaN(v)) return null;
+          const label = geoMode === 'country' ? d.Country : (d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`);
+          const countryCode = hasCountryCode ? d.CountryCode : null;
+          const continent = hasContinent ? d.Continent : null;
+          return { label, value: v, countryCode, continent };
+        })
+        .filter(Boolean);
+
+      if (values.length === 0) {
+        svg.selectAll('*').remove();
+        previousBeeswarmNodes = [];
+        return;
+      }
+
+      const sortedVals = values.map(v => v.value).slice().sort((a, b) => a - b);
+      const withPct = values.map(d => {
+        const smaller = sortedVals.filter(v => v < d.value).length;
+        const equal = sortedVals.filter(v => v === d.value).length;
+        const percentile = Math.round((smaller + 0.5 * equal) / sortedVals.length * 100);
+        return { ...d, percentile };
+      });
+
+      const extent = d3.extent(sortedVals);
+      const plotPaddingLeft = 50;
+      const plotPaddingRight = 70; // Increase right padding to make room for right-side percentile labels
+      const plotPaddingTop = 10;
+      const plotPaddingBottom = 40;
+      const y = d3.scaleLinear().domain(extent).nice().range([height - plotPaddingBottom, plotPaddingTop]);
+      const xCenter = (plotPaddingLeft + (width - plotPaddingRight)) / 2;
+
+      // Store existing elements for transition
+      const existingElements = svg.selectAll('.beeswarm-points circle, .beeswarm-points text');
+      const isFirstRender = existingElements.empty();
+
+      // Clear non-data elements but keep data points for transition
+      svg.selectAll('*:not(.beeswarm-points):not(.beeswarm-points circle):not(.beeswarm-points text)').remove();
+      // Remove any previous continent legend
+      svg.selectAll('.continent-legend').remove();
+      // Frame
+      svg.append('rect')
+        .attr('x', plotPaddingLeft)
+        .attr('y', plotPaddingTop)
+        .attr('width', (width - plotPaddingRight) - plotPaddingLeft)
+        .attr('height', (height - plotPaddingBottom) - plotPaddingTop)
+        .attr('fill', 'none')
+        .attr('stroke', '#cbd5e1')
+        .attr('stroke-width', 1);
+
+      const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
+      const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
+      const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
+      axisG.selectAll('text').style('font-size', '10px');
+
+      // Horizontal guides at deciles
+      for (let p = 10; p < 100; p += 10) {
+        const qVal = d3.quantileSorted(sortedVals, p / 100);
+        if (qVal != null) {
+          const qy = y(qVal);
+          svg.append('line')
+            .attr('x1', plotPaddingLeft)
+            .attr('x2', width - plotPaddingRight)
+            .attr('y1', qy)
+            .attr('y2', qy)
+            .attr('stroke', '#e2e8f0')
+            .attr('stroke-width', 1)
+            .attr('pointer-events', 'none');
+          // Right-side percentile labels every 10%
+          svg.append('text')
+            .attr('x', width - plotPaddingRight + 6)
+            .attr('y', qy + 3)
+            .attr('fill', '#475569')
+            .attr('font-size', 10)
+            .text(`${p}%`);
+        }
+      }
+
+      // Also include 0% and 100% labels (and guides)
+      const endpoints = [0, 100];
+      endpoints.forEach(P => {
+        const qVal = d3.quantileSorted(sortedVals, P / 100);
+        if (qVal != null) {
+          const qy = y(qVal);
+          // optional guide line
+          svg.append('line')
+            .attr('x1', plotPaddingLeft)
+            .attr('x2', width - plotPaddingRight)
+            .attr('y1', qy)
+            .attr('y2', qy)
+            .attr('stroke', '#e2e8f0')
+            .attr('stroke-width', 1)
+            .attr('pointer-events', 'none');
+          // label
+          svg.append('text')
+            .attr('x', width - plotPaddingRight + 6)
+            .attr('y', qy + 3)
+            .attr('fill', '#475569')
+            .attr('font-size', 10)
+            .text(`${P}%`);
+        }
+      });
+
+      const nodes = withPct.map(d => ({
+        x: xCenter,
+        y: y(d.value),
+        r: 4.5,
+        data: d
+      }));
+
+      const simulation = d3.forceSimulation(nodes)
+        .force('y', d3.forceY(d => y(d.data.value)).strength(1))
+        .force('x', d3.forceX(xCenter).strength(0.05))
+        .force('collide', d3.forceCollide(d => d.r + 2.2))
+        .stop();
+
+      for (let i = 0; i < 200; i++) simulation.tick();
+      nodes.forEach(n => {
+        n.x = Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, n.x));
+        n.y = Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, n.y));
+      });
+
+      const tooltip = d3.select('#beeswarm-tooltip');
+
+      // Continent color map (used only if hasContinent)
+      const continentColor = hasContinent ? (c => ({
+        'Africa': '#e67e22',
+        'Asia': '#f1c40f',
+        'Europe': '#2ecc71',
+        'North America': '#9b59b6',
+        'South America': '#9b59b6',
+        'Oceania': '#16a085',
+        'Antarctica': '#95a5a6'
+      })[c] || '#64748b') : (() => '#9b59b6');
+
+      // Create or update data points group
+      let dataGroup = svg.select('.beeswarm-points');
+      if (dataGroup.empty()) {
+        dataGroup = svg.append('g').attr('class', 'beeswarm-points');
+      }
+
+      if (hasCountryCode) {
+        // Use text elements instead of circles
+        const texts = dataGroup.selectAll('text')
+          .data(nodes, d => d.data.label); // Use label as key for object constancy
+
+        // Handle entering text elements (new data points)
+        const enteringTexts = texts.enter()
+          .append('text')
+          .attr('x', d => {
+            // If we have previous positions for this label, start from there
+            const prev = previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+            return prev ? prev.x : d.x;
+          })
+          .attr('y', d => {
+            const prev = previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+            return prev ? prev.y : d.y;
+          })
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .attr('font-size', '8px')
+          .attr('font-weight', d => (d.data.label === selectedCountry ? '800' : 'bold'))
+          .style('text-decoration', d => (d.data.label === selectedCountry ? 'underline' : 'none'))
+          .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === selectedCountry ? '#f1c40f' : '#9b59b6'))
+          .text(d => d.data.countryCode || '?');
+
+        // Handle exiting text elements (data points that are no longer present)
+        texts.exit().remove();
+
+        // Merge entering and updating text elements
+        const allTexts = enteringTexts.merge(texts);
+
+        // Animate to new positions
+        allTexts.transition()
+          .duration(600)
+          .ease(d3.easeQuadOut)
+          .attr('x', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
+          .attr('y', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
+          .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === selectedCountry ? '#f1c40f' : '#9b59b6'))
+          .attr('font-weight', d => (d.data.label === selectedCountry ? '800' : 'bold'))
+          .style('text-decoration', d => (d.data.label === selectedCountry ? 'underline' : 'none'));
+
+        // Store current positions for next transition
+        previousBeeswarmNodes = nodes.map(n => ({ ...n }));
+
+        // Add interaction handlers to all text elements
+        allTexts
+          .on('mouseenter', function(evt, d) {
+            const html = `${d.data.label}<br>Value: ${formatValue(d.data.value, metricKey)}<br>Percentile: ${d.data.percentile}%`;
+            tooltip.html(html)
+              .classed('hidden', false)
+              .style('left', (evt.offsetX + 32) + 'px') // 20px right from original +12px
+              .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
+            d3.select(this)
+              .attr('stroke', '#d35400')
+              .attr('stroke-width', 1.5)
+              .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === selectedCountry ? '#d4ac0d' : '#8e44ad'))
+              .attr('font-size', '10px');
+          })
+          .on('mousemove', function(evt) {
+            tooltip
+              .style('left', (evt.offsetX + 32) + 'px') // 20px right from original +12px
+              .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
+          })
+          .on('click', function(evt, d) {
+            // Click to select region in Category Slider V3
+            const newSelection = d.data.label;
+            if (!newSelection) return;
+            selectedCountry = newSelection;
+            // Sync the dropdown if option exists
+            const selectEl = document.getElementById('countrySelect');
+            if (selectEl) {
+              const exists = Array.from(selectEl.options).some(o => o.value === newSelection);
+              if (exists) selectEl.value = newSelection;
+            }
+            // Recompute and update UI
+            calculatePercentiles(selectedCountry);
+            updateCountryInfo();
+            // Re-render current metric in V3 and refresh labels/gradient
+            renderCategoryMetricListV3();
+            if (categorySelectedMetricKey) {
+              renderBeeswarmCategoryV3(categorySelectedMetricKey);
+            } else if (d && d.data) {
+              // Fallback to re-render current metric key if available in scope
+              renderBeeswarmCategoryV3(metricKey);
+            }
+          })
+          .on('mouseleave', function() {
+            tooltip.classed('hidden', true);
+            d3.select(this)
+              .attr('stroke', 'none')
+              .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === selectedCountry ? '#f1c40f' : '#9b59b6'))
+              .attr('font-size', '8px')
+              .attr('font-weight', d => (d.data.label === selectedCountry ? '800' : 'bold'))
+              .style('text-decoration', d => (d.data.label === selectedCountry ? 'underline' : 'none'));
+          });
+
+      } else {
+        // Fallback to circles if no CountryCode column
+        const circles = dataGroup.selectAll('circle')
+          .data(nodes, d => d.data.label); // Use label as key for object constancy
+
+        // Handle entering circles (new data points)
+        const enteringCircles = circles.enter()
+          .append('circle')
+          .attr('cx', d => {
+            // If we have previous positions for this label, start from there
+            const prev = previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+            return prev ? prev.x : d.x;
+          })
+          .attr('cy', d => {
+            const prev = previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+            return prev ? prev.y : d.y;
+          })
+          .attr('r', d => d.r)
+          .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === selectedCountry ? '#f1c40f' : '#9b59b6'))
+          .attr('opacity', 0.85);
+
+        // Handle exiting circles (data points that are no longer present)
+        circles.exit().remove();
+
+        // Merge entering and updating circles
+        const allCircles = enteringCircles.merge(circles);
+
+        // Animate to new positions
+        allCircles.transition()
+          .duration(600)
+          .ease(d3.easeQuadOut)
+          .attr('cx', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
+          .attr('cy', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
+          .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === selectedCountry ? '#f1c40f' : '#9b59b6'));
+
+        // Store current positions for next transition
+        previousBeeswarmNodes = nodes.map(n => ({ ...n }));
+
+        // Add interaction handlers to all circles
+        allCircles
+          .on('mouseenter', function(evt, d) {
+            const html = `${d.data.label}<br>Value: ${formatValue(d.data.value, metricKey)}<br>Percentile: ${d.data.percentile}%`;
+            tooltip.html(html)
+              .classed('hidden', false)
+              .style('left', (evt.offsetX + 32) + 'px') // 20px right from original +12px
+              .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
+            d3.select(this)
+              .attr('stroke', '#d35400')
+              .attr('stroke-width', 2)
+              .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === selectedCountry ? '#d4ac0d' : '#8e44ad'))
+              .attr('r', d.r + 2.5);
+          })
+          .on('mousemove', function(evt) {
+            tooltip
+              .style('left', (evt.offsetX + 32) + 'px') // 20px right from original +12px
+              .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
+          })
+          .on('click', function(evt, d) {
+            // Click to select region in Category Slider V3
+            const newSelection = d.data.label;
+            if (!newSelection) return;
+            selectedCountry = newSelection;
+            // Sync the dropdown if option exists
+            const selectEl = document.getElementById('countrySelect');
+            if (selectEl) {
+              const exists = Array.from(selectEl.options).some(o => o.value === newSelection);
+              if (exists) selectEl.value = newSelection;
+            }
+            // Recompute and update UI
+            calculatePercentiles(selectedCountry);
+            updateCountryInfo();
+            // Re-render current metric in V3 and refresh labels/gradient
+            renderCategoryMetricListV3();
+            if (categorySelectedMetricKey) {
+              renderBeeswarmCategoryV3(categorySelectedMetricKey);
+            } else if (d && d.data) {
+              // Fallback to re-render current metric key if available in scope
+              renderBeeswarmCategoryV3(metricKey);
+            }
+          })
+          .on('mouseleave', function() {
+            tooltip.classed('hidden', true);
+            d3.select(this)
+              .attr('stroke', 'none')
+              .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === selectedCountry ? '#f1c40f' : '#9b59b6'))
+              .attr('r', d => d.r);
+          });
+      }
+
+      // Hover horizontal line and percentile label
+      const hoverLine = svg.append('line')
+        .attr('class', 'hover-line')
+        .attr('x1', plotPaddingLeft)
+        .attr('x2', width - plotPaddingRight)
+        .attr('stroke', '#9aa5b1')
+        .attr('stroke-dasharray', '4 4')
+        .style('display', 'none');
+
+      const hoverLabel = document.getElementById('beeswarm-hover-label');
+
+      svg
+        .on('mouseenter', function() {
+          hoverLine.style('display', null);
+          hoverLabel.classList.remove('hidden');
+          // Ensure no box styling even if CSS is cached
+          hoverLabel.style.background = 'transparent';
+          hoverLabel.style.border = 'none';
+          hoverLabel.style.padding = '0';
+          hoverLabel.style.borderRadius = '0';
+          hoverLabel.style.fontWeight = 'normal';
+        })
+        .on('mousemove', function(evt) {
+          const [, my] = d3.pointer(evt);
+          const clampedY = Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, my));
+          hoverLine.attr('y1', clampedY).attr('y2', clampedY);
+          const hoveredValue = y.invert(clampedY);
+          const smaller = sortedVals.filter(v => v < hoveredValue).length;
+          const equal = sortedVals.filter(v => v === hoveredValue).length;
+          const p = Math.round((smaller + 0.5 * equal) / sortedVals.length * 100);
+          hoverLabel.textContent = `Percentile: ${p}%`;
+          hoverLabel.style.left = '75px'; // Position on left side near y-axis
+          hoverLabel.style.top = (clampedY - 6) + 'px';
+        })
+        .on('mouseleave', function() {
+          hoverLine.style('display', 'none');
+          hoverLabel.classList.add('hidden');
+        });
+
+      // Add legend if continent data exists
+      if (hasContinent) {
+        const presentContinents = Array.from(new Set(withPct.map(d => d.continent).filter(Boolean)));
+        const legend = svg.append('g').attr('class', 'continent-legend');
+        // Place legend inside the plot area near the top-right, leaving room for right axis labels
+        const legendX = (width - plotPaddingRight) - 120; // shift ~120px into plot
+        let legendY = plotPaddingTop + 12;
+        legend.selectAll('g.item')
+          .data(presentContinents)
+          .enter()
+          .append('g')
+          .attr('class', 'item')
+          .each(function(c, i) {
+            const g = d3.select(this);
+            g.append('rect')
+              .attr('x', legendX)
+              .attr('y', legendY + i * 16 - 8)
+              .attr('width', 10)
+              .attr('height', 10)
+              .attr('fill', continentColor(c))
+              .attr('stroke', '#334155')
+              .attr('stroke-width', 0.5);
+            g.append('text')
+              .attr('x', legendX + 14)
+              .attr('y', legendY + i * 16)
+              .attr('fill', '#475569')
+              .attr('font-size', 10)
+              .text(c);
+          });
+      }
+
+      svg.append('text')
+        .attr('x', plotPaddingLeft + 6)
+        .attr('y', 18)
+        .attr('fill', '#2c3e50')
+        .attr('font-size', 14)
+        .attr('font-weight', 'bold')
+        .text(formatMetricName(metricKey));
+    }
+
+    function findClosestMetricsSimplified(targetPercentile, tolerance = 5) {
+      if (Object.keys(currentPercentiles).length === 0) return [];
+      
+      // Convert target to number
+      const target = parseInt(targetPercentile);
+      
+      // 1. First pass: Find the absolute closest metric regardless of tolerance
+      const entries = Object.entries(currentPercentiles);
+      
+      const matches = entries.filter(([_, data]) => {
+        const bucket = Math.round(data.percentile / 5) * 5; // or Math.floor(...) * 5 if you prefer lower binning
+        return bucket === target;
+      });
+      
+      matches.sort((a, b) => a[1].percentile - b[1].percentile);
+      
+      return matches.map(([metric, data]) => ({
+        metric,
+        value: data.value,
+        percentile: data.percentile,
+        diff: Math.abs(data.percentile - target)
+      }));
+    }
+    
+    // Update metrics display based on percentile
+    function updateMetricsDisplay(percentile) {
+      // Update percentile display
+      document.getElementById('percentile-display').textContent = `${percentile}%`;
+      
+      // If no selection, don't proceed
+      if (!selectedCountry) {
+        document.getElementById('metric-cards').innerHTML = 
+          (geoMode === 'country' 
+            ? '<div class="no-metrics">Please select a country to view metrics</div>'
+            : '<div class="no-metrics">Please select a county to view metrics</div>');
+        return;
+      }
+      
+      // Find closest metrics
+      const closestMetrics = findClosestMetricsSimplified(percentile);
+      
+      // Update metrics display
+      const metricsContainer = document.getElementById('metric-cards');
+      metricsContainer.innerHTML = '';
+      
+      if (closestMetrics.length === 0) {
+        metricsContainer.innerHTML = '<div class="no-metrics">No metrics found at this percentile</div>';
+        return;
+      }
+      
+      // Display metrics
+      closestMetrics.forEach(item => {
+        const metricCard = document.createElement('div');
+        metricCard.className = 'metric-card';
+        
+        // Set border color based on how close it is to the target (closer = more vibrant)
+        const colorIntensity = Math.max(0, 100 - item.diff * 10);
+        metricCard.style.borderLeftColor = `hsla(204, 70%, 53%, ${colorIntensity}%)`;
+        
+        metricCard.innerHTML = `
+          <div class="metric-name">${formatMetricName(item.metric)}</div>
+          <div class="metric-value">Value: ${formatValue(item.value, item.metric)}</div>
+          <div class="metric-percentile">Percentile: ${item.percentile}%</div>
+        `;
+        
+        metricsContainer.appendChild(metricCard);
+      });
+    }
+    
+    // Format values based on metric type
+    function formatValue(value, metric) {
+      // Apply specific formatting based on metric name
+      if (metric.includes('national_income') || metric.includes('Income') || metric.includes('GDP')) {
+        return '$' + value.toLocaleString();
+      } else if (metric.includes('Pct') || metric.includes('percent') || metric.includes('Percent')) {
+        return value.toFixed(1) + '%';
+      } else if (metric.endsWith('rate') || metric.endsWith('Rate')) {
+        return value.toFixed(2);
+      } else if (value >= 1000) {
+        return value.toLocaleString();
+      } else if (Number.isInteger(value)) {
+        return value.toString();
+      } else {
+        return value.toFixed(2);
+      }
+    }
+    // Render box-and-whisker plot for selected metric (vertical value axis, box centered horizontally)
+    function renderBoxPlotCategory(metricKey) {
+      const svg = d3.select('#beeswarm-svg');
+      const container = document.querySelector('.beeswarm-panel');
+      if (!svg.node() || !container) return;
+
+      const width = 800;
+      const height = container.clientHeight || 400;
+      svg.attr('width', width).attr('height', height).style('width', width + 'px');
+
+      const values = jsonData
+        .map(d => {
+          const raw = d[metricKey];
+          const v = typeof raw === 'number' ? raw : parseFloat(raw);
+          if (raw === '..' || raw === undefined || raw === null || isNaN(v)) return null;
+          const label = geoMode === 'country' ? d.Country : (d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`);
+          return { label, value: v };
+        })
+        .filter(Boolean);
+
+      if (values.length === 0) {
+        svg.selectAll('*').remove();
+        previousBeeswarmNodes = [];
+        return;
+      }
+
+      const sortedVals = values.map(v => v.value).slice().sort((a, b) => a - b);
+
+      const extent = d3.extent(sortedVals);
+      const plotPaddingLeft = 50;
+      const plotPaddingRight = 70; // keep room for right labels if needed later
+      const plotPaddingTop = 10;
+      const plotPaddingBottom = 40;
+      const y = d3.scaleLinear().domain(extent).nice().range([height - plotPaddingBottom, plotPaddingTop]);
+      const xCenter = (plotPaddingLeft + (width - plotPaddingRight)) / 2;
+
+      svg.selectAll('*').remove();
+
+      // Frame
+      svg.append('rect')
+        .attr('x', plotPaddingLeft)
+        .attr('y', plotPaddingTop)
+        .attr('width', (width - plotPaddingRight) - plotPaddingLeft)
+        .attr('height', (height - plotPaddingBottom) - plotPaddingTop)
+        .attr('fill', 'none')
+        .attr('stroke', '#cbd5e1')
+        .attr('stroke-width', 1);
+
+      const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
+      const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
+      const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
+      axisG.selectAll('text').style('font-size', '10px');
+
+      // Compute quartiles and whiskers
+      const q1 = d3.quantileSorted(sortedVals, 0.25);
+      const median = d3.quantileSorted(sortedVals, 0.5);
+      const q3 = d3.quantileSorted(sortedVals, 0.75);
+      const iqr = (q3 - q1);
+      // Tukey whiskers: within 1.5*IQR
+      const lowerWhiskerVal = sortedVals.find(v => v >= (q1 - 1.5 * iqr)) ?? sortedVals[0];
+      const upperWhiskerVal = [...sortedVals].reverse().find(v => v <= (q3 + 1.5 * iqr)) ?? sortedVals[sortedVals.length - 1];
+
+      const boxWidth = 80;
+
+      // Whisker line
+      svg.append('line')
+        .attr('x1', xCenter)
+        .attr('x2', xCenter)
+        .attr('y1', y(lowerWhiskerVal))
+        .attr('y2', y(upperWhiskerVal))
+        .attr('stroke', '#94a3b8')
+        .attr('stroke-width', 1.5);
+
+      // Box (Q1 to Q3)
+      svg.append('rect')
+        .attr('x', xCenter - boxWidth / 2)
+        .attr('y', y(q3))
+        .attr('width', boxWidth)
+        .attr('height', Math.max(1, y(q1) - y(q3)))
+        .attr('rx', 6)
+        .attr('ry', 6)
+        .attr('fill', '#e6f2fb')
+        .attr('stroke', '#94a3b8')
+        .attr('stroke-width', 1.5);
+
+      // Median line
+      svg.append('line')
+        .attr('x1', xCenter - boxWidth / 2)
+        .attr('x2', xCenter + boxWidth / 2)
+        .attr('y1', y(median))
+        .attr('y2', y(median))
+        .attr('stroke', '#334155')
+        .attr('stroke-width', 1.5);
+
+      // Whisker caps
+      svg.append('line')
+        .attr('x1', xCenter - boxWidth / 4)
+        .attr('x2', xCenter + boxWidth / 4)
+        .attr('y1', y(lowerWhiskerVal))
+        .attr('y2', y(lowerWhiskerVal))
+        .attr('stroke', '#94a3b8')
+        .attr('stroke-width', 1.5);
+      svg.append('line')
+        .attr('x1', xCenter - boxWidth / 4)
+        .attr('x2', xCenter + boxWidth / 4)
+        .attr('y1', y(upperWhiskerVal))
+        .attr('y2', y(upperWhiskerVal))
+        .attr('stroke', '#94a3b8')
+        .attr('stroke-width', 1.5);
+
+      // Highlight current selection position on the plot
+      const selectedRow = (geoMode === 'country')
+        ? jsonData.find(d => d.Country === selectedCountry)
+        : jsonData.find(d => {
+            const label = d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`;
+            return label === selectedCountry;
+          });
+      if (selectedRow && selectedRow[metricKey] != null && selectedRow[metricKey] !== '..') {
+        const val = typeof selectedRow[metricKey] === 'number' ? selectedRow[metricKey] : parseFloat(selectedRow[metricKey]);
+        if (!isNaN(val)) {
+          svg.append('circle')
+            .attr('cx', xCenter)
+            .attr('cy', y(val))
+            .attr('r', 4)
+            .attr('fill', '#f1c40f')
+            .attr('stroke', '#1f2937')
+            .attr('stroke-width', 1);
+        }
+      }
+
+      // Title
+      svg.append('text')
+        .attr('x', plotPaddingLeft + 6)
+        .attr('y', 18)
+        .attr('fill', '#2c3e50')
+        .attr('font-size', 14)
+        .attr('font-weight', 'bold')
+        .text(formatMetricName(metricKey));
+
+      // Hover horizontal line and percentile label
+      const hoverLine = svg.append('line')
+        .attr('class', 'hover-line')
+        .attr('x1', plotPaddingLeft)
+        .attr('x2', width - plotPaddingRight)
+        .attr('stroke', '#9aa5b1')
+        .attr('stroke-dasharray', '4 4')
+        .style('display', 'none');
+
+      const hoverLabel = document.getElementById('beeswarm-hover-label');
+
+      svg
+        .on('mouseenter', function() {
+          hoverLine.style('display', null);
+          hoverLabel.classList.remove('hidden');
+        })
+        .on('mousemove', function(evt) {
+          const [, my] = d3.pointer(evt);
+          const clampedY = Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, my));
+          hoverLine.attr('y1', clampedY).attr('y2', clampedY);
+          const hoveredValue = y.invert(clampedY);
+          const smaller = sortedVals.filter(v => v < hoveredValue).length;
+          const equal = sortedVals.filter(v => v === hoveredValue).length;
+          const p = Math.round((smaller + 0.5 * equal) / sortedVals.length * 100);
+          hoverLabel.textContent = `Percentile: ${p}%`;
+          hoverLabel.style.left = '75px';
+          hoverLabel.style.top = (clampedY - 6) + 'px';
+        })
+        .on('mouseleave', function() {
+          hoverLine.style('display', 'none');
+          hoverLabel.classList.add('hidden');
+        });
+    }
+
+     // Render metric list with evenly spaced labels (Box and Whisker view)
+     function renderCategoryMetricListBox() {
+       const listEl = document.getElementById('indicator-list');
+       if (!listEl) return;
+       const metrics = getNumericMetrics();
+       listEl.innerHTML = '';
+       if (selectedCountry) {
+         calculatePercentiles(selectedCountry);
+       }
+       const decorated = metrics.map(m => ({
+         key: m,
+         pct: (currentPercentiles[m] && typeof currentPercentiles[m].percentile === 'number') ? currentPercentiles[m].percentile : -1
+       }));
+       decorated.sort((a, b) => b.pct - a.pct);
+ 
+       const wrapper = document.createElement('div');
+       wrapper.className = 'category-slider';
+       const labelsCol = document.createElement('div');
+       labelsCol.className = 'category-labels';
+       const railCol = document.createElement('div');
+       railCol.className = 'category-rail';
+       const track = document.createElement('div');
+       track.className = 'category-rail-track';
+       const handle = document.createElement('div');
+       handle.className = 'category-handle';
+      track.appendChild(handle);
+      railCol.appendChild(track);
+
+      decorated.forEach(({ key, pct }) => {
+        const item = document.createElement('div');
+        item.className = 'category-label';
+        item.dataset.metricKey = key;
+        item.dataset.percentile = pct >= 0 ? pct : -1;
+        
+        const metricName = document.createElement('span');
+        metricName.textContent = formatMetricName(key);
+        const percentileSpan = document.createElement('span');
+        percentileSpan.style.cssText = 'float: right; font-weight: bold; color: #000000;';
+        percentileSpan.textContent = pct >= 0 ? `${pct}%` : '';
+        item.appendChild(metricName);
+        item.appendChild(percentileSpan);
+        labelsCol.appendChild(item);
+      });
+
+      wrapper.appendChild(labelsCol);
+      wrapper.appendChild(railCol);
+      listEl.appendChild(wrapper);
+
+      requestAnimationFrame(() => {
+        track.style.height = labelsCol.clientHeight + 'px';
+        const labelNodes = Array.from(labelsCol.querySelectorAll('.category-label'));
+        const containerHeight = labelsCol.clientHeight;
+        const labelCount = labelNodes.length;
+        const totalPadding = 20;
+        const availableHeight = containerHeight - totalPadding;
+        const spacing = labelCount > 1 ? availableHeight / (labelCount - 1) : 0;
+        labelNodes.forEach((node, index) => {
+          const position = totalPadding / 2 + (index * spacing);
+          node.style.top = position + 'px';
+        });
+
+        const computeSnapPoints = () => {
+          categorySnapPoints = labelNodes.map(node => parseFloat(node.style.top) || 0);
+        };
+        computeSnapPoints();
+
+        const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
+        const gradient = createPercentileGradient(percentiles);
+        track.style.background = gradient;
+
+        const defaultIdx = Math.max(0, categorySelectedMetricKey ? labelNodes.findIndex(n => n.dataset.metricKey === categorySelectedMetricKey) : 0);
+        selectCategoryIndexBox(defaultIdx, { render: true });
+
+        labelNodes.forEach((node, idx) => {
+          node.addEventListener('click', () => selectCategoryIndexBox(idx, { render: true }));
+        });
+
+        // Drag interactions (enable scrolling between indicators)
+        let dragging = false;
+        const onPointerMove = (evt) => {
+          evt.preventDefault();
+          if (!dragging) return;
+          const trackRect = track.getBoundingClientRect();
+          const y = evt.clientY - trackRect.top;
+          let nearestIdx = 0;
+          let minDist = Infinity;
+          categorySnapPoints.forEach((p, i) => {
+            const d = Math.abs(p - y);
+            if (d < minDist) { minDist = d; nearestIdx = i; }
+          });
+          selectCategoryIndexBox(nearestIdx, { render: true });
+        };
+        const onPointerUp = () => {
+          dragging = false;
+          document.removeEventListener('pointermove', onPointerMove);
+          document.removeEventListener('pointerup', onPointerUp);
+        };
+        handle.addEventListener('pointerdown', (evt) => {
+          evt.preventDefault();
+          dragging = true;
+          document.addEventListener('pointermove', onPointerMove);
+          document.addEventListener('pointerup', onPointerUp);
+        });
+        // Clicking on track also snaps
+        track.addEventListener('pointerdown', (evt) => {
+          const trackRect = track.getBoundingClientRect();
+          const y = evt.clientY - trackRect.top;
+          let nearestIdx = 0;
+          let minDist = Infinity;
+          categorySnapPoints.forEach((p, i) => {
+            const d = Math.abs(p - y);
+            if (d < minDist) { minDist = d; nearestIdx = i; }
+          });
+          selectCategoryIndexBox(nearestIdx, { render: true });
+        });
+
+        const updatePositionsAndSnapPoints = () => {
+          const newContainerHeight = labelsCol.clientHeight;
+          track.style.height = newContainerHeight + 'px';
+          const totalPadding = 20;
+          const availableHeight = newContainerHeight - totalPadding;
+          const spacing = labelCount > 1 ? availableHeight / (labelCount - 1) : 0;
+          labelNodes.forEach((node, index) => {
+            const position = totalPadding / 2 + (index * spacing);
+            node.style.top = position + 'px';
+          });
+          computeSnapPoints();
+          const gradient = createPercentileGradient(percentiles);
+          track.style.background = gradient;
+          const active = listEl.querySelector('.category-label.active');
+          if (active) {
+            const labels = Array.from(listEl.querySelectorAll('.category-label'));
+            const idx = labels.indexOf(active);
+            if (idx >= 0 && categorySnapPoints[idx] != null) {
+              handle.style.top = categorySnapPoints[idx] + 'px';
+            }
+          }
+        };
+
+        labelsCol.addEventListener('scroll', updatePositionsAndSnapPoints);
+        window.addEventListener('resize', updatePositionsAndSnapPoints);
+      });
+
+      function selectCategoryIndexBox(index, opts = {}) {
+        const { render = true } = opts;
+        const labels = Array.from(listEl.querySelectorAll('.category-label'));
+        if (index < 0 || index >= labels.length) return;
+        labels.forEach(l => l.classList.remove('active'));
+        const selected = labels[index];
+        selected.classList.add('active');
+        const metricKey = selected.dataset.metricKey;
+        categorySelectedMetricKey = metricKey;
+        if (categorySnapPoints && categorySnapPoints[index] != null) {
+          const handle = listEl.querySelector('.category-handle');
+          if (handle) handle.style.top = categorySnapPoints[index] + 'px';
+        }
+        if (render) {
+          renderBoxPlotCategory(metricKey);
+        }
+      }
+    }
+
+  </script>
+  
+  <!-- Include SheetJS library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</body>
+</html>

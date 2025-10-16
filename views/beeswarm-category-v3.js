@@ -163,7 +163,41 @@ function renderBeeswarmCategoryV3(metricKey) {
   }
 
   if (hasCountryCode) {
-    // Use text elements instead of circles
+    // First, ensure circles are always rendered behind text by clearing and reordering
+    dataGroup.selectAll('*').remove();
+    
+    // Add background rectangles for selected country (always behind)
+    const selectedCircles = dataGroup.selectAll('rect.selected-bg')
+      .data(nodes.filter(n => n.data.label === window.appState.selectedCountry), d => d.data.label);
+    
+    selectedCircles.enter()
+      .append('rect')
+      .attr('class', 'selected-bg')
+      .attr('x', d => {
+        const prev = window.appState.previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+        return prev ? prev.x - 9 : d.x - 9;
+      })
+      .attr('y', d => {
+        const prev = window.appState.previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+        return prev ? prev.y - 6 : d.y - 6;
+      })
+      .attr('width', 18)
+      .attr('height', 12)
+      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : '#f1c40f')
+      .attr('stroke', '#000000')
+      .attr('stroke-width', 1)
+      .attr('pointer-events', 'none') // Rectangles don't block mouse events
+      .merge(selectedCircles)
+      .transition()
+      .duration(600)
+      .ease(d3.easeQuadOut)
+      .attr('x', d => Math.max(plotPaddingLeft - 9, Math.min(width - plotPaddingRight - 9, d.x - 9)))
+      .attr('y', d => Math.max(plotPaddingTop - 6, Math.min(height - plotPaddingBottom - 6, d.y - 6)))
+      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : '#f1c40f');
+    
+    selectedCircles.exit().remove();
+
+    // Use text elements instead of circles (always on top)
     const texts = dataGroup.selectAll('text')
       .data(nodes, d => d.data.label); // Use label as key for object constancy
 
@@ -182,9 +216,9 @@ function renderBeeswarmCategoryV3(metricKey) {
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
       .attr('font-size', '8px')
-      .attr('font-weight', d => (d.data.label === window.appState.selectedCountry ? '800' : 'bold'))
-      .style('text-decoration', d => (d.data.label === window.appState.selectedCountry ? 'underline' : 'none'))
-      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#f1c40f' : '#9b59b6'))
+      .attr('font-weight', 'bold')
+      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#ffffff' : '#9b59b6'))
+      .attr('pointer-events', 'all') // Text handles all mouse events
       .text(d => d.data.countryCode || '?');
 
     // Handle exiting text elements (data points that are no longer present)
@@ -199,9 +233,13 @@ function renderBeeswarmCategoryV3(metricKey) {
       .ease(d3.easeQuadOut)
       .attr('x', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
       .attr('y', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
-      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#f1c40f' : '#9b59b6'))
-      .attr('font-weight', d => (d.data.label === window.appState.selectedCountry ? '800' : 'bold'))
-      .style('text-decoration', d => (d.data.label === window.appState.selectedCountry ? 'underline' : 'none'));
+      .attr('fill', d => {
+        if (d.data.label === window.appState.selectedCountry) {
+          return '#ffffff'; // White text for selected country
+        }
+        return hasContinent ? continentColor(d.data.continent) : '#9b59b6';
+      })
+      .attr('font-weight', 'bold');
 
     // Store current positions for next transition
     window.appState.previousBeeswarmNodes = nodes.map(n => ({ ...n }));
@@ -248,14 +286,18 @@ function renderBeeswarmCategoryV3(metricKey) {
           window.renderBeeswarmCategoryV3(metricKey);
         }
       })
-      .on('mouseleave', function() {
+      .on('mouseleave', function(evt, d) {
         tooltip.classed('hidden', true);
         d3.select(this)
           .attr('stroke', 'none')
-          .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#f1c40f' : '#9b59b6'))
+          .attr('fill', d => {
+            if (d.data.label === window.appState.selectedCountry) {
+              return '#ffffff'; // White text for selected country
+            }
+            return hasContinent ? continentColor(d.data.continent) : '#9b59b6';
+          })
           .attr('font-size', '8px')
-          .attr('font-weight', d => (d.data.label === window.appState.selectedCountry ? '800' : 'bold'))
-          .style('text-decoration', d => (d.data.label === window.appState.selectedCountry ? 'underline' : 'none'));
+          .attr('font-weight', 'bold');
       });
 
   } else {

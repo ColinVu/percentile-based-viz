@@ -51,7 +51,7 @@ async function loadUSCountyData() {
 // Load Country Development indicators dataset
 async function loadCountryDevelopmentData() {
   try {
-    const response = await fetch('CountryDevelopmentIndicators.xlsx');
+    const response = await fetch('CountryDevelopmentIndicators_withcode.xlsx');
     const arrayBuffer = await response.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, { type: 'array' });

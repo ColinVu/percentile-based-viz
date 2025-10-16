@@ -31,9 +31,20 @@
     </div>
   </div>
 
-  <div class="header">
-    <div class="control-bar">
-      <div class="dataset-selector">
+  <!-- Sidebar Toggle Button -->
+  <button class="sidebar-toggle" id="sidebar-toggle">
+    <span class="arrow"><</span>
+  </button>
+
+  <!-- Collapsible Sidebar -->
+  <div class="sidebar open" id="sidebar">
+    <div class="sidebar-header">
+      <h2>Controls</h2>
+    </div>
+    
+    <div class="sidebar-content">
+      <div class="control-section">
+        <h3>Dataset</h3>
         <div class="dataset-options">
           <label class="dataset-option">
             <input type="radio" name="dataset" value="us-counties" checked>
@@ -48,31 +59,52 @@
             <span>Custom Dataset</span>
             <div class="custom-upload" id="custom-upload" style="display: none;">
               <label for="file-input" class="file-upload">Upload</label>
-        <input type="file" id="file-input" accept=".xlsx,.xls">
-        <span class="file-name" id="file-name">No file selected</span>
+              <input type="file" id="file-input" accept=".xlsx,.xls">
+              <span class="file-name" id="file-name">No file selected</span>
             </div>
           </label>
         </div>
       </div>
-      <h1 id="app-title">Percentile Scroll</h1>
-      <select id="countrySelect">
-        <option value="">Select an area...</option>
-      </select>
-    </div>
-    <div class="toggle-view">
-      <div class="toggle-view-label">
-        Select view:
-      </div>
-      <select class="toggle-view-select" id="toggle-view">
-        <option value="percentile" selected>Percentile Scroll</option>
-        <option value="identifier">Location Identifier View</option>
-        <option value="category">Category Slider View</option>
-        <option value="category-v2">Category Slider V2</option>
-        <option value="category-v3">Category Slider V3</option>
-        <option value="box">Box and Whisker</option>
-      </select>
-    </div>
 
+      <div class="control-section">
+        <h3>View Mode</h3>
+        <select class="toggle-view-select" id="toggle-view">
+          <option value="percentile" selected>Percentile Scroll</option>
+          <option value="identifier">Location Identifier View</option>
+          <option value="category">Category Slider View</option>
+          <option value="category-v2">Category Slider V2</option>
+          <option value="category-v3">Category Slider V3</option>
+          <option value="category-v4">Category Slider V4</option>
+          <option value="box">Box and Whisker</option>
+        </select>
+      </div>
+
+      <div class="control-section" id="location-section">
+        <h3>Location</h3>
+        <select id="countrySelect">
+          <option value="">Select an area...</option>
+        </select>
+      </div>
+
+      <div class="control-section" id="state-section" style="display: none;">
+        <h3>State</h3>
+        <select id="stateSelect">
+          <option value="">Select a state...</option>
+        </select>
+      </div>
+
+      <div class="control-section" id="county-section" style="display: none;">
+        <h3>County</h3>
+        <select id="countySelect">
+          <option value="">Select a county...</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Header (simplified) -->
+  <div class="header">
+    <h1 id="app-title">Percentile Scroll</h1>
   </div>
   
   <div class="percentile-scroll-container" id="percentile-scroll-container">
@@ -119,12 +151,24 @@
   <script src="views/category-slider-v2.js"></script>
   <script src="views/beeswarm-category-v3.js"></script>
   <script src="views/category-slider-v3.js"></script>
+  <script src="views/category-slider-v4.js"></script>
   <script src="views/box-plot.js"></script>
   <script src="views/box-whisker.js"></script>
 
   <script>
     // Initialize the application
     document.addEventListener('DOMContentLoaded', function() {
+      // Set initial sidebar state (starts open)
+      document.body.classList.add('sidebar-open');
+      
+      // Set initial view mode state (default is percentile, so show location section)
+      const locationSection = document.getElementById('location-section');
+      const stateSection = document.getElementById('state-section');
+      const countySection = document.getElementById('county-section');
+      locationSection.style.display = 'block';
+      stateSection.style.display = 'none';
+      countySection.style.display = 'none';
+      
       // Create percentile steps
       window.createPercentileSteps();
       
@@ -138,8 +182,430 @@
       window.loadSelectedDataset();
     });
     
+    // Function to populate state dropdown from dataset
+    function populateStateDropdown() {
+      const stateSelect = document.getElementById('stateSelect');
+      const countySelect = document.getElementById('countySelect');
+      
+      // Clear existing options
+      stateSelect.innerHTML = '<option value="">Select a state...</option>';
+      countySelect.innerHTML = '<option value="">Select a county...</option>';
+      
+      if (!window.appState.jsonData || window.appState.jsonData.length === 0) {
+        return;
+      }
+      
+      // Get unique states from the dataset
+      const states = [...new Set(window.appState.jsonData
+        .map(d => d.State)
+        .filter(state => state && state.trim() !== '')
+      )].sort();
+      
+      // Populate state dropdown
+      states.forEach(state => {
+        const option = document.createElement('option');
+        option.value = state;
+        option.textContent = state;
+        stateSelect.appendChild(option);
+      });
+      
+      // Auto-select first state if available
+      if (states.length > 0) {
+        stateSelect.value = states[0];
+        // Populate counties for the first state
+        populateCountyDropdown(states[0]);
+      }
+    }
+    
+    // Function to populate county dropdown based on selected state
+    function populateCountyDropdown(selectedState) {
+      const countySelect = document.getElementById('countySelect');
+      
+      // Clear existing options
+      countySelect.innerHTML = '<option value="">Select a county...</option>';
+      
+      if (!selectedState || !window.appState.jsonData || window.appState.jsonData.length === 0) {
+        return;
+      }
+      
+      // Get counties for the selected state
+      const counties = window.appState.jsonData
+        .filter(d => d.State === selectedState && d.County && d.County.trim() !== '')
+        .map(d => d.County)
+        .sort();
+      
+      // Populate county dropdown
+      counties.forEach(county => {
+        const option = document.createElement('option');
+        option.value = county;
+        option.textContent = county;
+        countySelect.appendChild(option);
+      });
+      
+      // Auto-select first county if available
+      if (counties.length > 0) {
+        countySelect.value = counties[0];
+      }
+    }
+    
+    // Function to render beeswarm for Category Slider V4 (filtered by state)
+    function renderBeeswarmCategoryV4(metricKey) {
+      const svg = d3.select('#beeswarm-svg');
+      const container = document.querySelector('.beeswarm-panel');
+      if (!svg.node() || !container) return;
+
+      const width = 800;
+      const height = container.clientHeight || 400;
+      svg.attr('width', width).attr('height', height).style('width', width + 'px');
+
+      // Get selected state and county
+      const selectedState = document.getElementById('stateSelect').value;
+      const selectedCounty = document.getElementById('countySelect').value;
+      
+      if (!selectedState) {
+        svg.selectAll('*').remove();
+        window.appState.previousBeeswarmNodes = [];
+        return;
+      }
+
+      // Filter data to selected state only
+      const stateData = window.appState.jsonData.filter(d => d.State === selectedState);
+      
+      const values = stateData
+        .map(d => {
+          const raw = d[metricKey];
+          const v = typeof raw === 'number' ? raw : parseFloat(raw);
+          if (raw === '..' || raw === undefined || raw === null || isNaN(v)) return null;
+          const label = d.County || 'Unknown County';
+          return { label, value: v, county: d.County, state: d.State };
+        })
+        .filter(Boolean);
+
+      if (values.length === 0) {
+        svg.selectAll('*').remove();
+        window.appState.previousBeeswarmNodes = [];
+        return;
+      }
+
+      const sortedVals = values.map(v => v.value).slice().sort((a, b) => a - b);
+      const withPct = values.map(d => {
+        const smaller = sortedVals.filter(v => v < d.value).length;
+        const equal = sortedVals.filter(v => v === d.value).length;
+        const percentile = Math.round((smaller + 0.5 * equal) / sortedVals.length * 100);
+        return { ...d, percentile };
+      });
+
+      const extent = d3.extent(sortedVals);
+      const plotPaddingLeft = 50;
+      const plotPaddingRight = 70;
+      const plotPaddingTop = 10;
+      const plotPaddingBottom = 40;
+      const y = d3.scaleLinear().domain(extent).nice().range([height - plotPaddingBottom, plotPaddingTop]);
+      const xCenter = (plotPaddingLeft + (width - plotPaddingRight)) / 2;
+
+      // Store existing circles for transition
+      const existingCircles = svg.selectAll('.beeswarm-points circle');
+      const isFirstRender = existingCircles.empty();
+
+      // Clear non-circle elements but keep circles for transition
+      svg.selectAll('*:not(.beeswarm-points):not(.beeswarm-points circle)').remove();
+      
+      // Frame
+      svg.append('rect')
+        .attr('x', plotPaddingLeft)
+        .attr('y', plotPaddingTop)
+        .attr('width', (width - plotPaddingRight) - plotPaddingLeft)
+        .attr('height', (height - plotPaddingBottom) - plotPaddingTop)
+        .attr('fill', 'none')
+        .attr('stroke', '#cbd5e1')
+        .attr('stroke-width', 1);
+
+      const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
+      const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
+      const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
+      axisG.selectAll('text').style('font-size', '10px');
+
+      // Horizontal guides at deciles
+      for (let p = 10; p < 100; p += 10) {
+        const qVal = d3.quantileSorted(sortedVals, p / 100);
+        if (qVal != null) {
+          const qy = y(qVal);
+          svg.append('line')
+            .attr('x1', plotPaddingLeft)
+            .attr('x2', width - plotPaddingRight)
+            .attr('y1', qy)
+            .attr('y2', qy)
+            .attr('stroke', '#e2e8f0')
+            .attr('stroke-width', 1)
+            .attr('pointer-events', 'none');
+          // Right-side percentile labels every 10%
+          svg.append('text')
+            .attr('x', width - plotPaddingRight + 6)
+            .attr('y', qy + 3)
+            .attr('fill', '#475569')
+            .attr('font-size', 10)
+            .text(`${p}%`);
+        }
+      }
+
+      // Also include 0% and 100% labels (and guides)
+      const endpoints = [0, 100];
+      endpoints.forEach(P => {
+        const qVal = d3.quantileSorted(sortedVals, P / 100);
+        if (qVal != null) {
+          const qy = y(qVal);
+          // optional guide line
+          svg.append('line')
+            .attr('x1', plotPaddingLeft)
+            .attr('x2', width - plotPaddingRight)
+            .attr('y1', qy)
+            .attr('y2', qy)
+            .attr('stroke', '#e2e8f0')
+            .attr('stroke-width', 1)
+            .attr('pointer-events', 'none');
+          // label
+          svg.append('text')
+            .attr('x', width - plotPaddingRight + 6)
+            .attr('y', qy + 3)
+            .attr('fill', '#475569')
+            .attr('font-size', 10)
+            .text(`${P}%`);
+        }
+      });
+
+      const nodes = withPct.map(d => ({
+        x: xCenter,
+        y: y(d.value),
+        r: 4.5,
+        data: d
+      }));
+
+      const simulation = d3.forceSimulation(nodes)
+        .force('y', d3.forceY(d => y(d.data.value)).strength(1))
+        .force('x', d3.forceX(xCenter).strength(0.05))
+        .force('collide', d3.forceCollide(d => d.r + 1.2))
+        .stop();
+
+      for (let i = 0; i < 200; i++) simulation.tick();
+      nodes.forEach(n => {
+        n.x = Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, n.x));
+        n.y = Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, n.y));
+      });
+
+      const tooltip = d3.select('#beeswarm-tooltip');
+
+      // Create or update circles with smooth transitions
+      let circleGroup = svg.select('.beeswarm-points');
+      if (circleGroup.empty()) {
+        circleGroup = svg.append('g').attr('class', 'beeswarm-points');
+      }
+
+      // Bind data to circles
+      const circles = circleGroup.selectAll('circle')
+        .data(nodes, d => d.data.label); // Use label as key for object constancy
+
+      // Handle entering circles (new data points)
+      const enteringCircles = circles.enter()
+        .append('circle')
+        .attr('cx', d => {
+          // If we have previous positions for this label, start from there
+          const prev = window.appState.previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+          return prev ? prev.x : d.x;
+        })
+        .attr('cy', d => {
+          const prev = window.appState.previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+          return prev ? prev.y : d.y;
+        })
+        .attr('r', d => d.r)
+        .attr('fill', d => (d.data.label === selectedCounty ? '#f1c40f' : '#9b59b6'))
+        .attr('opacity', 0.85);
+
+      // Handle exiting circles (data points that are no longer present)
+      circles.exit().remove();
+
+      // Merge entering and updating circles
+      const allCircles = enteringCircles.merge(circles);
+
+      // Animate to new positions
+      allCircles.transition()
+        .duration(600)
+        .ease(d3.easeQuadOut)
+        .attr('cx', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
+        .attr('cy', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
+        .attr('fill', d => (d.data.label === selectedCounty ? '#f1c40f' : '#9b59b6'));
+
+      // Store current positions for next transition
+      window.appState.previousBeeswarmNodes = nodes.map(n => ({ ...n }));
+
+      // Add interaction handlers to all circles
+      allCircles
+        .on('mouseenter', function(evt, d) {
+          const html = `${d.data.label}<br>Value: ${window.formatValue(d.data.value, metricKey)}<br>Percentile: ${d.data.percentile}%`;
+          tooltip.html(html)
+            .classed('hidden', false)
+            .style('left', (evt.offsetX + 32) + 'px')
+            .style('top', (evt.offsetY - 48) + 'px');
+          d3.select(this)
+            .attr('stroke', '#1f6fa5')
+            .attr('stroke-width', 2)
+            .attr('fill', d => (d.data.label === selectedCounty ? '#d4ac0d' : '#8e44ad'))
+            .attr('r', d.r + 2.5);
+        })
+        .on('mousemove', function(evt) {
+          tooltip
+            .style('left', (evt.offsetX + 32) + 'px')
+            .style('top', (evt.offsetY - 48) + 'px');
+        })
+        .on('click', function(evt, d) {
+          // Click to select county in Category Slider V4
+          const newSelection = d.data.label;
+          if (!newSelection) return;
+
+          // Update county dropdown value
+          const countySelect = document.getElementById('countySelect');
+          if (countySelect) countySelect.value = newSelection;
+
+          // Update selectedCountry to "County, State" and recompute percentiles
+          if (selectedState && newSelection) {
+            const display = `${newSelection}, ${selectedState}`;
+            window.appState.selectedCountry = display;
+            window.calculatePercentiles(window.appState.selectedCountry);
+            window.updateCountryInfo();
+          }
+
+          // Refresh metric list and beeswarm for V4
+          if (window.renderCategoryMetricListV4) {
+            window.renderCategoryMetricListV4();
+          }
+          renderBeeswarmCategoryV4(metricKey);
+        })
+        .on('mouseleave', function() {
+          tooltip.classed('hidden', true);
+          d3.select(this)
+            .attr('stroke', 'none')
+            .attr('fill', d => (d.data.label === selectedCounty ? '#f1c40f' : '#9b59b6'))
+            .attr('r', d => d.r);
+        });
+
+      // Hover horizontal line and percentile label
+      const hoverLine = svg.append('line')
+        .attr('class', 'hover-line')
+        .attr('x1', plotPaddingLeft)
+        .attr('x2', width - plotPaddingRight)
+        .attr('stroke', '#9aa5b1')
+        .attr('stroke-dasharray', '4 4')
+        .style('display', 'none');
+
+      const hoverLabel = document.getElementById('beeswarm-hover-label');
+
+      svg
+        .on('mouseenter', function() {
+          hoverLine.style('display', null);
+          hoverLabel.classList.remove('hidden');
+          // Ensure no box styling even if CSS is cached
+          hoverLabel.style.background = 'transparent';
+          hoverLabel.style.border = 'none';
+          hoverLabel.style.padding = '0';
+          hoverLabel.style.borderRadius = '0';
+          hoverLabel.style.fontWeight = 'normal';
+        })
+        .on('mousemove', function(evt) {
+          const [, my] = d3.pointer(evt);
+          const clampedY = Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, my));
+          hoverLine.attr('y1', clampedY).attr('y2', clampedY);
+          const hoveredValue = y.invert(clampedY);
+          const smaller = sortedVals.filter(v => v < hoveredValue).length;
+          const equal = sortedVals.filter(v => v === hoveredValue).length;
+          const p = Math.round((smaller + 0.5 * equal) / sortedVals.length * 100);
+          hoverLabel.textContent = `Percentile: ${p}%`;
+          hoverLabel.style.left = '75px'; // Position on left side near y-axis
+          hoverLabel.style.top = (clampedY - 6) + 'px';
+        })
+        .on('mouseleave', function() {
+          hoverLine.style('display', 'none');
+          hoverLabel.classList.add('hidden');
+        });
+
+      svg.append('text')
+        .attr('x', plotPaddingLeft + 6)
+        .attr('y', 18)
+        .attr('fill', '#2c3e50')
+        .attr('font-size', 14)
+        .attr('font-weight', 'bold')
+        .text(window.formatMetricName(metricKey));
+    }
+    
+    // Make renderBeeswarmCategoryV4 available globally
+    window.renderBeeswarmCategoryV4 = renderBeeswarmCategoryV4;
+    
     // Set up event listeners
     function setupEventListeners() {
+      // Sidebar toggle functionality
+      const sidebarToggle = document.getElementById('sidebar-toggle');
+      const sidebar = document.getElementById('sidebar');
+      const arrow = sidebarToggle.querySelector('.arrow');
+      
+      function toggleSidebar() {
+        const isOpen = sidebar.classList.contains('open');
+        if (isOpen) {
+          sidebar.classList.remove('open');
+          document.body.classList.remove('sidebar-open');
+          arrow.textContent = '>';
+        } else {
+          sidebar.classList.add('open');
+          document.body.classList.add('sidebar-open');
+          arrow.textContent = '<';
+        }
+      }
+      
+      sidebarToggle.addEventListener('click', toggleSidebar);
+      
+      // State dropdown change event
+      document.getElementById('stateSelect').addEventListener('change', function() {
+        const selectedState = this.value;
+        populateCountyDropdown(selectedState);
+
+        if (window.appState.viewMode === 'category-v4') {
+          // Set selectedCountry to first available county in this state
+          const countySel = document.getElementById('countySelect');
+          const countyVal = countySel && countySel.value ? countySel.value : '';
+          if (selectedState && countyVal) {
+            const display = `${countyVal}, ${selectedState}`;
+            window.appState.selectedCountry = display;
+            window.calculatePercentiles(window.appState.selectedCountry);
+            window.updateCountryInfo();
+          }
+          if (window.appState.categorySelectedMetricKey) {
+            renderBeeswarmCategoryV4(window.appState.categorySelectedMetricKey);
+          }
+          // Refresh metric list to reflect new percentiles
+          if (window.renderCategoryMetricListV4) {
+            window.renderCategoryMetricListV4();
+          }
+        }
+      });
+      
+      // County dropdown change event
+      document.getElementById('countySelect').addEventListener('change', function() {
+        if (window.appState.viewMode === 'category-v4') {
+          const stateSel = document.getElementById('stateSelect');
+          const selectedState = stateSel ? stateSel.value : '';
+          const selectedCounty = this.value;
+          if (selectedState && selectedCounty) {
+            const display = `${selectedCounty}, ${selectedState}`;
+            window.appState.selectedCountry = display;
+            window.calculatePercentiles(window.appState.selectedCountry);
+            window.updateCountryInfo();
+          }
+          if (window.appState.categorySelectedMetricKey) {
+            renderBeeswarmCategoryV4(window.appState.categorySelectedMetricKey);
+          }
+          if (window.renderCategoryMetricListV4) {
+            window.renderCategoryMetricListV4();
+          }
+        }
+      });
+      
       // Dataset selection change event
       document.querySelectorAll('input[name="dataset"]').forEach(radio => {
         radio.addEventListener('change', function() {
@@ -155,6 +621,11 @@
             fileName.textContent = 'No file selected';
             // Load the selected dataset
             window.loadSelectedDataset();
+            
+            // If currently in V4 view, repopulate state dropdown
+            if (window.appState.viewMode === 'category-v4') {
+              populateStateDropdown();
+            }
           }
         });
       });
@@ -164,7 +635,9 @@
         const file = e.target.files[0];
         if (!file) return;
         
-        document.getElementById('file-name').textContent = file.name;
+        // Truncate filename to 20 characters with ellipsis if longer
+        const fileName = file.name.length > 20 ? file.name.substring(0, 20) + '...' : file.name;
+        document.getElementById('file-name').textContent = fileName;
         
         // Show loading indicator
         document.querySelector('.loading').style.display = 'flex';
@@ -187,6 +660,11 @@
               window.appState.jsonData = XLSX.utils.sheet_to_json(worksheet);
               
               window.processData();
+              
+              // If currently in V4 view, repopulate state dropdown
+              if (window.appState.viewMode === 'category-v4') {
+                populateStateDropdown();
+              }
             } else {
               // If XLSX library is not available, use the example data
               alert('XLSX library not loaded. Using example data instead.');
@@ -253,6 +731,13 @@
               window.renderBeeswarmCategoryV3(firstMetricBtn.dataset.metricKey);
               firstMetricBtn.classList.add('active');
             }
+          } else if (window.appState.viewMode === 'category-v4') {
+            window.renderCategoryMetricListV4();
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBeeswarmCategoryV4(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
           } else if (window.appState.viewMode === 'box') {
             window.renderCategoryMetricListBox();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
@@ -278,6 +763,23 @@
           const pctContainer = document.getElementById('percentile-scroll-container');
           const idContainer = document.getElementById('country-identifier-container');
           window.appState.viewMode = this.value;
+          
+          // Show/hide location controls based on view mode
+          const locationSection = document.getElementById('location-section');
+          const stateSection = document.getElementById('state-section');
+          const countySection = document.getElementById('county-section');
+          
+          if (this.value === 'category-v4') {
+            locationSection.style.display = 'none';
+            stateSection.style.display = 'block';
+            countySection.style.display = 'block';
+            // Populate state dropdown when switching to V4
+            populateStateDropdown();
+          } else {
+            locationSection.style.display = 'block';
+            stateSection.style.display = 'none';
+            countySection.style.display = 'none';
+          }
           if (this.value === 'identifier') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
@@ -316,6 +818,16 @@
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
               window.renderBeeswarmCategoryV3(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (this.value === 'category-v4') {
+            pctContainer.classList.add('hidden');
+            idContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Category Slider V4';
+            window.renderCategoryMetricListV4();
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              renderBeeswarmCategoryV4(firstMetricBtn.dataset.metricKey);
               firstMetricBtn.classList.add('active');
             }
         } else if (this.value === 'box') {

@@ -198,7 +198,7 @@ function renderBeeswarmCategory(metricKey) {
         .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
     })
     .on('click', function(evt, d) {
-      // Click to select region in Category Slider V2
+      // Click to select region and refresh current Category view
       const newSelection = d.data.label;
       if (!newSelection) return;
       window.appState.selectedCountry = newSelection;
@@ -211,10 +211,17 @@ function renderBeeswarmCategory(metricKey) {
       // Recompute and update UI
       window.calculatePercentiles(window.appState.selectedCountry);
       window.updateCountryInfo();
-      // Re-render current metric in V2 and refresh labels/gradient
-      if (window.renderCategoryMetricListV2) {
+      // Re-render current metric for the active category view and refresh labels/gradient
+      if (window.appState && window.appState.viewMode === 'category' && window.renderCategoryMetricList) {
+        window.renderCategoryMetricList();
+      } else if (window.appState && window.appState.viewMode === 'category-v2' && window.renderCategoryMetricListV2) {
         window.renderCategoryMetricListV2();
+      } else if (window.appState && window.appState.viewMode === 'category-v3' && window.renderCategoryMetricListV3) {
+        window.renderCategoryMetricListV3();
+      } else if (window.appState && window.appState.viewMode === 'category-v4' && window.renderCategoryMetricListV4) {
+        window.renderCategoryMetricListV4();
       } else if (window.renderCategoryMetricList) {
+        // Fallback to the original Category view if viewMode not set
         window.renderCategoryMetricList();
       }
       if (window.appState.categorySelectedMetricKey) {

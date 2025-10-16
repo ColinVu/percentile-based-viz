@@ -38,8 +38,17 @@ function renderCategoryMetricList() {
     item.className = 'category-label';
     item.dataset.metricKey = key;
     item.dataset.percentile = pct >= 0 ? pct : -1;
-    const pctText = pct >= 0 ? ` — ${pct}%` : '';
-    item.textContent = `${window.formatMetricName(key)}${pctText}`;
+    
+    // Create structured content with right-justified bold percentile
+    const metricName = document.createElement('span');
+    metricName.textContent = window.formatMetricName(key);
+    
+    const percentileSpan = document.createElement('span');
+    percentileSpan.style.cssText = 'float: right; font-weight: bold; color: #000000;';
+    percentileSpan.textContent = pct >= 0 ? `${pct}%` : '';
+    
+    item.appendChild(metricName);
+    item.appendChild(percentileSpan);
     labelsCol.appendChild(item);
   });
 
@@ -117,11 +126,6 @@ function renderCategoryMetricList() {
       }
     }
     
-    // Final bounds check
-    labelData.forEach(data => {
-      data.actualPosition = Math.max(0, Math.min(data.actualPosition, maxPosition));
-    });
-    
     // Apply the calculated positions
     labelData.forEach(data => {
       data.node.style.top = data.actualPosition + 'px';
@@ -134,11 +138,6 @@ function renderCategoryMetricList() {
       });
     };
     computeSnapPoints();
-
-    // Apply color ramp to slider track based on percentiles
-    const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
-    const gradient = window.createPercentileGradient(percentiles);
-    track.style.background = gradient;
 
     // Select initial metric
     const defaultIdx = Math.max(0, window.appState.categorySelectedMetricKey ? labelNodes.findIndex(n => n.dataset.metricKey === window.appState.categorySelectedMetricKey) : 0);
@@ -194,7 +193,7 @@ function renderCategoryMetricList() {
       const newContainerHeight = labelsCol.clientHeight;
       track.style.height = newContainerHeight + 'px';
       
-      // Reposition labels with buffering logic
+      // Reposition labels with balanced buffering logic
       const minLabelHeight = 6;
       const labelPadding = 2;
       const minSpacing = minLabelHeight + labelPadding;
@@ -214,57 +213,54 @@ function renderCategoryMetricList() {
       
       labelData.sort((a, b) => b.percentile - a.percentile);
       
-      // Apply buffering algorithm to prevent overlaps with bottom crowding handling
-      for (let i = 1; i < labelData.length; i++) {
-        const current = labelData[i];
-        const above = labelData[i - 1];
-        
-        if (current.actualPosition < above.actualPosition + minSpacing) {
-          current.actualPosition = above.actualPosition + minSpacing;
-        }
-      }
-      
-      // Handle bottom crowding by redistributing labels that would go beyond bounds
+      // Apply forward/backward relaxation like initial render
       const maxPosition = newContainerHeight - minLabelHeight;
-      const overflowLabels = labelData.filter(data => data.actualPosition > maxPosition);
+      const minPosition = 0;
       
-      if (overflowLabels.length > 0) {
-        // Find the first label that starts the overflow
-        const firstOverflowIndex = labelData.findIndex(data => data.actualPosition > maxPosition);
-        const labelsToRedistribute = labelData.slice(firstOverflowIndex);
-        
-        if (labelsToRedistribute.length > 0) {
-          // Calculate available space for redistribution
-          const startPosition = firstOverflowIndex > 0 ? labelData[firstOverflowIndex - 1].actualPosition + minSpacing : 0;
-          const availableSpace = maxPosition - startPosition;
-          const neededSpace = (labelsToRedistribute.length - 1) * minSpacing;
-          
-          if (availableSpace >= neededSpace) {
-            // Redistribute evenly in available space
-            labelsToRedistribute.forEach((data, i) => {
-              data.actualPosition = startPosition + (i * minSpacing);
-            });
-          } else {
-            // Not enough space - use minimum spacing and clamp to bounds
-            labelsToRedistribute.forEach((data, i) => {
-              data.actualPosition = Math.min(startPosition + (i * minSpacing), maxPosition);
-            });
-          }
+      labelData.forEach(d => {
+        d.actualPosition = Math.max(minPosition, Math.min(d.actualPosition, maxPosition));
+      });
+      for (let i = 1; i < labelData.length; i++) {
+        const prev = labelData[i - 1];
+        const cur = labelData[i];
+        const minPos = prev.actualPosition + minSpacing;
+        if (cur.actualPosition < minPos) cur.actualPosition = minPos;
+      }
+      for (let i = labelData.length - 2; i >= 0; i--) {
+        const next = labelData[i + 1];
+        const cur = labelData[i];
+        const maxPos = next.actualPosition - minSpacing;
+        if (cur.actualPosition > maxPos) cur.actualPosition = maxPos;
+      }
+      // Shift block if overflowing bottom/top
+      const bottomOverflow = labelData[labelData.length - 1].actualPosition - maxPosition;
+      const topUnderflow = minPosition - labelData[0].actualPosition;
+      let blockShift = 0;
+      if (bottomOverflow > 0) blockShift -= bottomOverflow;
+      if (topUnderflow > 0) blockShift += topUnderflow;
+      if (Math.abs(blockShift) > 0.1) {
+        labelData.forEach(d => {
+          d.actualPosition = Math.max(minPosition, Math.min(maxPosition, d.actualPosition + blockShift));
+        });
+      }
+      // Gentle recenter
+      const span = labelData[labelData.length - 1].actualPosition - labelData[0].actualPosition;
+      if (span < maxPosition - minPosition) {
+        const desiredStart = (maxPosition - span) / 2;
+        const shift = desiredStart - labelData[0].actualPosition;
+        if (isFinite(shift) && Math.abs(shift) > 0.1) {
+          labelData.forEach(d => {
+            d.actualPosition = Math.max(minPosition, Math.min(maxPosition, d.actualPosition + shift));
+          });
         }
       }
       
-      // Apply positions with final bounds check
+      // Apply positions
       labelData.forEach(data => {
-        data.actualPosition = Math.max(0, Math.min(data.actualPosition, maxPosition));
         data.node.style.top = data.actualPosition + 'px';
       });
       
       computeSnapPoints();
-      
-      // Reapply color ramp on resize
-      const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
-      const gradient = window.createPercentileGradient(percentiles);
-      track.style.background = gradient;
       
       const active = listEl.querySelector('.category-label.active');
       if (active) {

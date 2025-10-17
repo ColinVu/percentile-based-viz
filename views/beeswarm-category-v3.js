@@ -1,5 +1,5 @@
 /**
- * Beeswarm chart rendering for Category Slider V3
+ * Beeswarm chart rendering for Category Slider (Country Detailed)
  * Uses country codes as text labels with optional continent colors
  */
 
@@ -8,9 +8,12 @@ function renderBeeswarmCategoryV3(metricKey) {
   const container = document.querySelector('.beeswarm-panel');
   if (!svg.node() || !container) return;
 
-  const width = 800;
+  const width = (container.clientWidth - 20) || 800; // 20px padding adjustment
   const height = container.clientHeight || 400;
-  svg.attr('width', width).attr('height', height).style('width', width + 'px');
+  svg.attr('width', width)
+     .attr('height', height)
+     .style('display', 'block');
+  console.log('Beeswarm category v3 width:', width, 'container:', container.clientWidth);
 
   // Check if CountryCode/Continent columns exist
   const hasCountryCode = window.appState.jsonData.length > 0 && window.appState.jsonData[0].hasOwnProperty('CountryCode');
@@ -48,7 +51,7 @@ function renderBeeswarmCategoryV3(metricKey) {
   const extent = d3.extent(sortedVals);
   const plotPaddingLeft = 50;
   const plotPaddingRight = 70; // Increase right padding to make room for right-side percentile labels
-  const plotPaddingTop = 10;
+  const plotPaddingTop = 40; // Increased to prevent tooltip cutoff
   const plotPaddingBottom = 40;
   const y = d3.scaleLinear().domain(extent).nice().range([height - plotPaddingBottom, plotPaddingTop]);
   const xCenter = (plotPaddingLeft + (width - plotPaddingRight)) / 2;
@@ -183,7 +186,7 @@ function renderBeeswarmCategoryV3(metricKey) {
       })
       .attr('width', 18)
       .attr('height', 12)
-      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : '#f1c40f')
+      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : '#e74c3c')
       .attr('stroke', '#000000')
       .attr('stroke-width', 1)
       .attr('pointer-events', 'none') // Rectangles don't block mouse events
@@ -193,7 +196,7 @@ function renderBeeswarmCategoryV3(metricKey) {
       .ease(d3.easeQuadOut)
       .attr('x', d => Math.max(plotPaddingLeft - 9, Math.min(width - plotPaddingRight - 9, d.x - 9)))
       .attr('y', d => Math.max(plotPaddingTop - 6, Math.min(height - plotPaddingBottom - 6, d.y - 6)))
-      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : '#f1c40f');
+      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : '#e74c3c');
     
     selectedCircles.exit().remove();
 
@@ -264,7 +267,7 @@ function renderBeeswarmCategoryV3(metricKey) {
           .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
       })
       .on('click', function(evt, d) {
-        // Click to select region in Category Slider V3
+        // Click to select region in Category Slider (Country Detailed)
         const newSelection = d.data.label;
         if (!newSelection) return;
         window.appState.selectedCountry = newSelection;
@@ -317,8 +320,8 @@ function renderBeeswarmCategoryV3(metricKey) {
         const prev = window.appState.previousBeeswarmNodes.find(p => p.data.label === d.data.label);
         return prev ? prev.y : d.y;
       })
-      .attr('r', d => d.r)
-      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#f1c40f' : '#9b59b6'))
+      .attr('r', d => d.data.label === window.appState.selectedCountry ? d.r + 1.5 : d.r)
+      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#9b59b6'))
       .attr('opacity', 0.85);
 
     // Handle exiting circles (data points that are no longer present)
@@ -333,7 +336,8 @@ function renderBeeswarmCategoryV3(metricKey) {
       .ease(d3.easeQuadOut)
       .attr('cx', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
       .attr('cy', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
-      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#f1c40f' : '#9b59b6'));
+      .attr('r', d => d.data.label === window.appState.selectedCountry ? d.r + 1.5 : d.r)
+      .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#9b59b6'));
 
     // Store current positions for next transition
     window.appState.previousBeeswarmNodes = nodes.map(n => ({ ...n }));
@@ -349,7 +353,7 @@ function renderBeeswarmCategoryV3(metricKey) {
         d3.select(this)
           .attr('stroke', '#d35400')
           .attr('stroke-width', 2)
-          .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#d4ac0d' : '#8e44ad'))
+          .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#c0392b' : '#8e44ad'))
           .attr('r', d.r + 2.5);
       })
       .on('mousemove', function(evt) {
@@ -358,7 +362,7 @@ function renderBeeswarmCategoryV3(metricKey) {
           .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
       })
       .on('click', function(evt, d) {
-        // Click to select region in Category Slider V3
+        // Click to select region in Category Slider (Country Detailed)
         const newSelection = d.data.label;
         if (!newSelection) return;
         window.appState.selectedCountry = newSelection;
@@ -384,7 +388,7 @@ function renderBeeswarmCategoryV3(metricKey) {
         tooltip.classed('hidden', true);
         d3.select(this)
           .attr('stroke', 'none')
-          .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#f1c40f' : '#9b59b6'))
+          .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#9b59b6'))
           .attr('r', d => d.r);
       });
   }

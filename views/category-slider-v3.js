@@ -1,5 +1,5 @@
 /**
- * Category Slider V3
+ * Category Slider (Country Detailed)
  * Shows metrics with country code labels and continent colors
  */
 

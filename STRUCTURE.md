@@ -19,10 +19,10 @@ All view logic has been extracted into separate JavaScript modules:
 
 #### View Modules
 - `percentile-scroll.js` - Percentile Scroll view (main scrolling view)
-- `location-identifier.js` - Location Identifier view with horizontal beeswarm
-- `category-slider.js` - Category Slider view (percentile-based positioning)
-- `category-slider-v2.js` - Category Slider V2 (evenly spaced labels)
-- `category-slider-v3.js` - Category Slider V3 (country code labels)
+- `location-identifier.js` - Horizontal view with horizontal beeswarm
+- `category-slider.js` - Category Slider (Distributed) (percentile-based positioning)
+- `category-slider-v2.js` - Category Slider (Color ramp) (evenly spaced labels)
+- `category-slider-v3.js` - Category Slider (Country Detailed) (country code labels)
 - `box-whisker.js` - Box and Whisker view
 - `beeswarm-category.js` - Beeswarm rendering for category sliders
 - `beeswarm-category-v3.js` - Beeswarm rendering with country codes/continents

@@ -1,9 +1,9 @@
 /**
- * Category Slider V4
+ * Category Slider (County Detailed)
  * Clone of V2 with evenly spaced labels (not percentile-based positioning)
  */
 
-// Render metric list with evenly spaced labels (Category Slider V4)
+// Render metric list with evenly spaced labels (Category Slider - County Detailed)
 function renderCategoryMetricListV4() {
   const listEl = document.getElementById('indicator-list');
   if (!listEl) return;

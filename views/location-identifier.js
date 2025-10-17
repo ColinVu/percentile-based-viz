@@ -1,5 +1,5 @@
 /**
- * Location Identifier View
+ * Horizontal View
  * Shows beeswarm plot with horizontal value axis
  */
 
@@ -28,10 +28,13 @@ function renderBeeswarm(metricKey) {
   const container = document.querySelector('.beeswarm-panel');
   if (!svg.node() || !container) return;
 
-  // Use a constant plot width to avoid layout-dependent overflow
-  const width = 800;
-  const height = container.clientHeight || 400;
-  svg.attr('width', width).attr('height', height).style('width', width + 'px');
+  // Use container width to make responsive (subtract padding)
+  const width = (container.clientWidth - 20) || 800; // 20px padding adjustment
+  const height = container.clientHeight*0.9 || 400;
+  svg.attr('width', width)
+     .attr('height', height)
+     .style('display', 'block');
+  console.log('Horizontal view width:', width, 'container:', container.clientWidth);
 
   const values = window.appState.jsonData
     .map(d => {
@@ -76,6 +79,7 @@ function renderBeeswarm(metricKey) {
     .attr('stroke', '#cbd5e1')
     .attr('stroke-width', 1);
 
+  // Setup axis
   const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
   const axis = d3.axisBottom(x).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
   const axisG = svg.append('g').attr('transform', `translate(0, ${height - 30})`).call(axis);
@@ -127,7 +131,7 @@ function renderBeeswarm(metricKey) {
     .append('circle')
     .attr('cx', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
     .attr('cy', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
-    .attr('r', d => d.r)
+    .attr('r', d => d.data.label === window.appState.selectedCountry ? d.r + 1.5 : d.r)
     .attr('fill', d => {
       const label = d.data.label;
       return label === window.appState.selectedCountry ? '#e74c3c' : '#3498db';

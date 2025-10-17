@@ -9,9 +9,12 @@ function renderBeeswarmCategory(metricKey) {
   const container = document.querySelector('.beeswarm-panel');
   if (!svg.node() || !container) return;
 
-  const width = 800;
+  const width = (container.clientWidth - 20) || 800; // 20px padding adjustment
   const height = container.clientHeight || 400;
-  svg.attr('width', width).attr('height', height).style('width', width + 'px');
+  svg.attr('width', width)
+     .attr('height', height)
+     .style('display', 'block');
+  console.log('Beeswarm category width:', width, 'container:', container.clientWidth);
 
   const values = window.appState.jsonData
     .map(d => {
@@ -40,7 +43,7 @@ function renderBeeswarmCategory(metricKey) {
   const extent = d3.extent(sortedVals);
   const plotPaddingLeft = 50;
   const plotPaddingRight = 70; // Increase right padding to make room for right-side percentile labels
-  const plotPaddingTop = 10;
+  const plotPaddingTop = 40; // Increased to prevent tooltip cutoff
   const plotPaddingBottom = 40;
   const y = d3.scaleLinear().domain(extent).nice().range([height - plotPaddingBottom, plotPaddingTop]);
   const xCenter = (plotPaddingLeft + (width - plotPaddingRight)) / 2;
@@ -157,8 +160,8 @@ function renderBeeswarmCategory(metricKey) {
       const prev = window.appState.previousBeeswarmNodes.find(p => p.data.label === d.data.label);
       return prev ? prev.y : d.y;
     })
-    .attr('r', d => d.r)
-    .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#f1c40f' : '#9b59b6'))
+    .attr('r', d => d.data.label === window.appState.selectedCountry ? d.r + 1.5 : d.r)
+    .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#9b59b6'))
     .attr('opacity', 0.85);
 
   // Handle exiting circles (data points that are no longer present)
@@ -173,7 +176,8 @@ function renderBeeswarmCategory(metricKey) {
     .ease(d3.easeQuadOut)
     .attr('cx', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
     .attr('cy', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
-    .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#f1c40f' : '#9b59b6'));
+    .attr('r', d => d.data.label === window.appState.selectedCountry ? d.r + 1.5 : d.r)
+    .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#9b59b6'));
 
   // Store current positions for next transition
   window.appState.previousBeeswarmNodes = nodes.map(n => ({ ...n }));
@@ -189,7 +193,7 @@ function renderBeeswarmCategory(metricKey) {
       d3.select(this)
         .attr('stroke', '#1f6fa5')
         .attr('stroke-width', 2)
-        .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#d4ac0d' : '#8e44ad'))
+        .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#c0392b' : '#8e44ad'))
         .attr('r', d.r + 2.5);
     })
     .on('mousemove', function(evt) {
@@ -235,7 +239,7 @@ function renderBeeswarmCategory(metricKey) {
       tooltip.classed('hidden', true);
       d3.select(this)
         .attr('stroke', 'none')
-        .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#f1c40f' : '#9b59b6'))
+        .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#9b59b6'))
         .attr('r', d => d.r);
     });
 

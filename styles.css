@@ -48,7 +48,7 @@ body:not(.sidebar-open) .sidebar-toggle {
 
 .sidebar {
   position: fixed;
-  left: -280px;
+  left: -300px;
   top: 0;
   width: 300px;
   height: 100vh;
@@ -193,7 +193,7 @@ select {
 
 .percentile-scroll-container {
   display: flex;
-  height: calc(100vh - 100px);
+  height: calc(100vh -100px);
 }
 
 .country-identifier-container {
@@ -204,10 +204,11 @@ select {
 .identifier-layout {
   display: flex;
   height: 100%;
+  width: 100%;
 }
 
 .indicator-list {
-  flex: 0 0 40%;
+  flex: 0 0 30%;
   overflow-y: auto;
   padding: 10px 10px 10px 20px;
   border-right: 1px solid #e2e8f0;
@@ -237,7 +238,7 @@ select {
   border-color: #3498db;
 }
 
-/* Category slider (Category Slider View) */
+/* Category slider (Category Slider - Distributed) */
 .category-slider {
   position: relative;
   display: flex;
@@ -314,9 +315,10 @@ select {
 }
 
 .beeswarm-panel {
-  flex: 0 0 60%;
+  flex: 1;
   position: relative;
   padding: 10px 20px;
+  overflow: visible;
 }
 
 #beeswarm-svg {

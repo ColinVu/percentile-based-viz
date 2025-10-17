@@ -8,9 +8,12 @@ function renderBoxPlotCategory(metricKey) {
   const container = document.querySelector('.beeswarm-panel');
   if (!svg.node() || !container) return;
 
-  const width = 800;
+  const width = (container.clientWidth - 20) || 800; // 20px padding adjustment
   const height = container.clientHeight || 400;
-  svg.attr('width', width).attr('height', height).style('width', width + 'px');
+  svg.attr('width', width)
+     .attr('height', height)
+     .style('display', 'block');
+  console.log('Box plot width:', width, 'container:', container.clientWidth);
 
   const values = window.appState.jsonData
     .map(d => {

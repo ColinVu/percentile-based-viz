@@ -1,9 +1,9 @@
 /**
- * Category Slider V2
+ * Category Slider (Color ramp)
  * Shows metrics with evenly spaced labels (not percentile-based positioning)
  */
 
-// Render metric list with evenly spaced labels (Category Slider V2)
+// Render metric list with evenly spaced labels (Category Slider - Color ramp)
 function renderCategoryMetricListV2() {
   const listEl = document.getElementById('indicator-list');
   if (!listEl) return;

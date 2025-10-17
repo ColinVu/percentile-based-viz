@@ -1,5 +1,5 @@
 /**
- * Category Slider View
+ * Category Slider (Distributed)
  * Shows metrics sorted by percentile with a vertical slider
  */
 

@@ -65,10 +65,10 @@
       </div>
       <select class="toggle-view-select" id="toggle-view">
         <option value="percentile" selected>Percentile Scroll</option>
-        <option value="identifier">Location Identifier View</option>
-        <option value="category">Category Slider View</option>
-        <option value="category-v2">Category Slider V2</option>
-        <option value="category-v3">Category Slider V3</option>
+        <option value="identifier">Horizontal View</option>
+        <option value="category">Category Slider (Distributed)</option>
+        <option value="category-v2">Category Slider (Color ramp)</option>
+        <option value="category-v3">Category Slider (Country Detailed)</option>
         <option value="box">Box and Whisker</option>
       </select>
     </div>
@@ -281,7 +281,7 @@
           if (this.value === 'identifier') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Location Identifier View';
+            document.getElementById('app-title').textContent = 'Horizontal View';
             window.renderIdentifierMetricList();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -291,7 +291,7 @@
           } else if (this.value === 'category') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider View';
+            document.getElementById('app-title').textContent = 'Category Slider (Distributed)';
             window.renderCategoryMetricList();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -301,7 +301,7 @@
           } else if (this.value === 'category-v2') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider V2';
+            document.getElementById('app-title').textContent = 'Category Slider (Color ramp)';
             window.renderCategoryMetricListV2();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -311,7 +311,7 @@
           } else if (this.value === 'category-v3') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider V3';
+            document.getElementById('app-title').textContent = 'Category Slider (Country Detailed)';
             window.renderCategoryMetricListV3();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {

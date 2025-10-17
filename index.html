@@ -70,11 +70,11 @@
         <h3>View Mode</h3>
         <select class="toggle-view-select" id="toggle-view">
           <option value="percentile" selected>Percentile Scroll</option>
-          <option value="identifier">Location Identifier View</option>
-          <option value="category">Category Slider View</option>
-          <option value="category-v2">Category Slider V2</option>
-          <option value="category-v3">Category Slider V3</option>
-          <option value="category-v4">Category Slider V4</option>
+          <option value="identifier">Horizontal View</option>
+          <option value="category">Category Slider (Distributed)</option>
+          <option value="category-v2">Category Slider (Color ramp)</option>
+          <option value="category-v3">Category Slider (Country Detailed)</option>
+          <option value="category-v4">Category Slider (County Detailed)</option>
           <option value="box">Box and Whisker</option>
         </select>
       </div>
@@ -248,15 +248,18 @@
       }
     }
     
-    // Function to render beeswarm for Category Slider V4 (filtered by state)
+    // Function to render beeswarm for Category Slider (County Detailed) (filtered by state)
     function renderBeeswarmCategoryV4(metricKey) {
       const svg = d3.select('#beeswarm-svg');
       const container = document.querySelector('.beeswarm-panel');
       if (!svg.node() || !container) return;
 
-      const width = 800;
+      const width = (container.clientWidth - 20) || 800; // 20px padding adjustment
       const height = container.clientHeight || 400;
-      svg.attr('width', width).attr('height', height).style('width', width + 'px');
+      svg.attr('width', width)
+         .attr('height', height)
+         .style('display', 'block');
+      console.log('Beeswarm category v4 width:', width, 'container:', container.clientWidth);
 
       // Get selected state and county
       const selectedState = document.getElementById('stateSelect').value;
@@ -298,7 +301,7 @@
       const extent = d3.extent(sortedVals);
       const plotPaddingLeft = 50;
       const plotPaddingRight = 70;
-      const plotPaddingTop = 10;
+      const plotPaddingTop = 40; // Increased to prevent tooltip cutoff
       const plotPaddingBottom = 40;
       const y = d3.scaleLinear().domain(extent).nice().range([height - plotPaddingBottom, plotPaddingTop]);
       const xCenter = (plotPaddingLeft + (width - plotPaddingRight)) / 2;
@@ -416,8 +419,8 @@
           const prev = window.appState.previousBeeswarmNodes.find(p => p.data.label === d.data.label);
           return prev ? prev.y : d.y;
         })
-        .attr('r', d => d.r)
-        .attr('fill', d => (d.data.label === selectedCounty ? '#f1c40f' : '#9b59b6'))
+        .attr('r', d => d.data.label === selectedCounty ? d.r + 1.5 : d.r)
+        .attr('fill', d => (d.data.label === selectedCounty ? '#e74c3c' : '#9b59b6'))
         .attr('opacity', 0.85);
 
       // Handle exiting circles (data points that are no longer present)
@@ -432,7 +435,8 @@
         .ease(d3.easeQuadOut)
         .attr('cx', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
         .attr('cy', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
-        .attr('fill', d => (d.data.label === selectedCounty ? '#f1c40f' : '#9b59b6'));
+        .attr('r', d => d.data.label === selectedCounty ? d.r + 1.5 : d.r)
+        .attr('fill', d => (d.data.label === selectedCounty ? '#e74c3c' : '#9b59b6'));
 
       // Store current positions for next transition
       window.appState.previousBeeswarmNodes = nodes.map(n => ({ ...n }));
@@ -448,7 +452,7 @@
           d3.select(this)
             .attr('stroke', '#1f6fa5')
             .attr('stroke-width', 2)
-            .attr('fill', d => (d.data.label === selectedCounty ? '#d4ac0d' : '#8e44ad'))
+            .attr('fill', d => (d.data.label === selectedCounty ? '#c0392b' : '#8e44ad'))
             .attr('r', d.r + 2.5);
         })
         .on('mousemove', function(evt) {
@@ -457,7 +461,7 @@
             .style('top', (evt.offsetY - 48) + 'px');
         })
         .on('click', function(evt, d) {
-          // Click to select county in Category Slider V4
+          // Click to select county in Category Slider (County Detailed)
           const newSelection = d.data.label;
           if (!newSelection) return;
 
@@ -483,7 +487,7 @@
           tooltip.classed('hidden', true);
           d3.select(this)
             .attr('stroke', 'none')
-            .attr('fill', d => (d.data.label === selectedCounty ? '#f1c40f' : '#9b59b6'))
+            .attr('fill', d => (d.data.label === selectedCounty ? '#e74c3c' : '#9b59b6'))
             .attr('r', d => d.r);
         });
 
@@ -556,6 +560,47 @@
           document.body.classList.add('sidebar-open');
           arrow.textContent = '<';
         }
+        
+        // Re-render beeswarm after sidebar animation completes
+        setTimeout(() => {
+          const viewMode = window.appState.viewMode;
+          console.log('Sidebar toggled, re-rendering view:', viewMode);
+          if (viewMode === 'identifier') {
+            const activeMetric = document.querySelector('.indicator-list .indicator-item.active');
+            if (activeMetric && activeMetric.dataset.metricKey) {
+              console.log('Re-rendering horizontal view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarm(activeMetric.dataset.metricKey);
+            }
+          } else if (viewMode === 'category' || viewMode === 'category-v2') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            console.log('Sidebar - Category view - activeMetric:', activeMetric);
+            console.log('Sidebar - Category view - metricKey:', activeMetric?.dataset?.metricKey);
+            console.log('Sidebar - Category view - renderFunction:', typeof window.renderBeeswarmCategory);
+            if (activeMetric && activeMetric.dataset.metricKey && window.renderBeeswarmCategory) {
+              console.log('Re-rendering category view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategory(activeMetric.dataset.metricKey);
+            } else {
+              console.log('Sidebar - Category view - condition failed');
+            }
+          } else if (viewMode === 'category-v3') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && window.renderBeeswarmCategoryV3) {
+              console.log('Re-rendering category v3 view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryV3(activeMetric.dataset.metricKey);
+            }
+          } else if (viewMode === 'category-v4') {
+            if (window.appState.categorySelectedMetricKey) {
+              console.log('Re-rendering category v4 view:', window.appState.categorySelectedMetricKey);
+              renderBeeswarmCategoryV4(window.appState.categorySelectedMetricKey);
+            }
+          } else if (viewMode === 'box') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && window.renderBoxPlotCategory) {
+              console.log('Re-rendering box plot view:', activeMetric.dataset.metricKey);
+              window.renderBoxPlotCategory(activeMetric.dataset.metricKey);
+            }
+          }
+        }, 400); // Wait for sidebar transition (300ms) + layout reflow buffer
       }
       
       sidebarToggle.addEventListener('click', toggleSidebar);
@@ -783,7 +828,7 @@
           if (this.value === 'identifier') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Location Identifier View';
+            document.getElementById('app-title').textContent = 'Horizontal View';
             window.renderIdentifierMetricList();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -793,7 +838,7 @@
           } else if (this.value === 'category') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider View';
+            document.getElementById('app-title').textContent = 'Category Slider (Distributed)';
             window.renderCategoryMetricList();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -803,7 +848,7 @@
           } else if (this.value === 'category-v2') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider V2';
+            document.getElementById('app-title').textContent = 'Category Slider (Color ramp)';
             window.renderCategoryMetricListV2();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -813,7 +858,7 @@
           } else if (this.value === 'category-v3') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider V3';
+            document.getElementById('app-title').textContent = 'Category Slider (Country Detailed)';
             window.renderCategoryMetricListV3();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -823,7 +868,7 @@
           } else if (this.value === 'category-v4') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider V4';
+            document.getElementById('app-title').textContent = 'Category Slider (County Detailed)';
             window.renderCategoryMetricListV4();
             const firstMetricBtn = document.querySelector('.indicator-list .category-label');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -850,6 +895,51 @@
           }
         });
       }
+      
+      // Add window resize listener to re-render beeswarm for all views
+      let resizeTimeout;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          const viewMode = window.appState.viewMode;
+          console.log('Window resized, re-rendering view:', viewMode);
+          if (viewMode === 'identifier') {
+            const activeMetric = document.querySelector('.indicator-list .indicator-item.active');
+            if (activeMetric && activeMetric.dataset.metricKey) {
+              console.log('Re-rendering horizontal view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarm(activeMetric.dataset.metricKey);
+            }
+          } else if (viewMode === 'category' || viewMode === 'category-v2') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            console.log('Resize - Category view - activeMetric:', activeMetric);
+            console.log('Resize - Category view - metricKey:', activeMetric?.dataset?.metricKey);
+            console.log('Resize - Category view - renderFunction:', typeof window.renderBeeswarmCategory);
+            if (activeMetric && activeMetric.dataset.metricKey && window.renderBeeswarmCategory) {
+              console.log('Re-rendering category view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategory(activeMetric.dataset.metricKey);
+            } else {
+              console.log('Resize - Category view - condition failed');
+            }
+          } else if (viewMode === 'category-v3') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && window.renderBeeswarmCategoryV3) {
+              console.log('Re-rendering category v3 view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryV3(activeMetric.dataset.metricKey);
+            }
+          } else if (viewMode === 'category-v4') {
+            if (window.appState.categorySelectedMetricKey) {
+              console.log('Re-rendering category v4 view:', window.appState.categorySelectedMetricKey);
+              renderBeeswarmCategoryV4(window.appState.categorySelectedMetricKey);
+            }
+          } else if (viewMode === 'box') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && window.renderBoxPlotCategory) {
+              console.log('Re-rendering box plot view:', activeMetric.dataset.metricKey);
+              window.renderBoxPlotCategory(activeMetric.dataset.metricKey);
+            }
+          }
+        }, 250); // Debounce resize events
+      });
     }
   </script>
 </body>

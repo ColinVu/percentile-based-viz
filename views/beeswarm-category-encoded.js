@@ -1,28 +1,52 @@
 /**
- * Beeswarm chart rendering for category sliders
- * Shared across Category Slider, V2, V3 views
+ * Beeswarm chart for Category Slider (Encoded Data)
+ * Displays circles colored by a selected categorical column
  */
 
-// Render beeswarm with axes swapped (value on Y, swarm along X), selected country in colored dot
-function renderBeeswarmCategory(metricKey) {
+function renderBeeswarmCategoryEncoded(metricKey) {
   const svg = d3.select('#beeswarm-svg');
   const container = document.querySelector('.beeswarm-panel');
   if (!svg.node() || !container) return;
 
-  const width = (container.clientWidth - 20) || 800; // 20px padding adjustment
+  const width = (container.clientWidth - 20) || 800;
   const height = container.clientHeight || 400;
-  svg.attr('width', width)
-     .attr('height', height)
-     .style('display', 'block');
-  console.log('Beeswarm category width:', width, 'container:', container.clientWidth);
+  svg
+    .attr('width', width)
+    .attr('height', height)
+    .style('display', 'block');
+
+  const encodingField = window.appState.categoryEncodedField;
+  const hasEncodingField = encodingField && window.appState.jsonData.length > 0 && Object.prototype.hasOwnProperty.call(window.appState.jsonData[0], encodingField);
+  const encodingLabel = encodingField ? window.formatMetricName(encodingField) : 'Group';
+  const fallbackCategory = hasEncodingField ? 'Not specified' : 'All items';
 
   const values = window.appState.jsonData
     .map(d => {
       const raw = d[metricKey];
       const v = typeof raw === 'number' ? raw : parseFloat(raw);
-      if (raw === '..' || raw === undefined || raw === null || isNaN(v)) return null;
-      const label = window.appState.geoMode === 'country' ? d.Country : (d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`);
-      return { label, value: v };
+      if (raw === '..' || raw === undefined || raw === null || Number.isNaN(v)) return null;
+      const label = window.appState.geoMode === 'country'
+        ? d.Country
+        : (d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`);
+      if (!label) return null;
+
+      const rawCategory = hasEncodingField ? d[encodingField] : null;
+      let categoryValue = fallbackCategory;
+      if (hasEncodingField) {
+        if (rawCategory === undefined || rawCategory === null || rawCategory === '..') {
+          categoryValue = fallbackCategory;
+        } else {
+          const catStr = String(rawCategory).trim();
+          categoryValue = catStr === '' ? fallbackCategory : catStr;
+        }
+      }
+
+      return {
+        label,
+        value: v,
+        category: categoryValue,
+        rawCategory
+      };
     })
     .filter(Boolean);
 
@@ -42,19 +66,32 @@ function renderBeeswarmCategory(metricKey) {
 
   const extent = d3.extent(sortedVals);
   const plotPaddingLeft = 50;
-  const plotPaddingRight = 70; // Increase right padding to make room for right-side percentile labels
-  const plotPaddingTop = 40; // Increased to prevent tooltip cutoff
+  const plotPaddingRight = 90;
+  const plotPaddingTop = 40;
   const plotPaddingBottom = 40;
   const y = d3.scaleLinear().domain(extent).nice().range([height - plotPaddingBottom, plotPaddingTop]);
   const xCenter = (plotPaddingLeft + (width - plotPaddingRight)) / 2;
 
-  // Store existing circles for transition
-  const existingCircles = svg.selectAll('.beeswarm-points circle');
-  const isFirstRender = existingCircles.empty();
+  const previousNodes = Array.isArray(window.appState.previousBeeswarmNodes)
+    ? window.appState.previousBeeswarmNodes
+    : [];
 
-  // Clear non-circle elements but keep circles for transition
-  svg.selectAll('*:not(.beeswarm-points):not(.beeswarm-points circle)').remove();
-  // Frame
+  svg.selectAll('*').remove();
+
+  const categories = Array.from(new Set(withPct.map(d => d.category))).filter(Boolean);
+  if (categories.length === 0) {
+    categories.push(fallbackCategory);
+  }
+
+  const colorScale = d3.scaleOrdinal()
+    .domain(categories)
+    .range(categories.map((_, idx) => {
+      if (categories.length === 1) {
+        return d3.interpolateRainbow(0.35);
+      }
+      return d3.interpolateRainbow(idx / categories.length);
+    }));
+
   svg.append('rect')
     .attr('x', plotPaddingLeft)
     .attr('y', plotPaddingTop)
@@ -69,7 +106,6 @@ function renderBeeswarmCategory(metricKey) {
   const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
   axisG.selectAll('text').style('font-size', '10px');
 
-  // Horizontal guides at deciles
   for (let p = 10; p < 100; p += 10) {
     const qVal = d3.quantileSorted(sortedVals, p / 100);
     if (qVal != null) {
@@ -82,7 +118,6 @@ function renderBeeswarmCategory(metricKey) {
         .attr('stroke', '#e2e8f0')
         .attr('stroke-width', 1)
         .attr('pointer-events', 'none');
-      // Right-side percentile labels every 10%
       svg.append('text')
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
@@ -92,13 +127,10 @@ function renderBeeswarmCategory(metricKey) {
     }
   }
 
-  // Also include 0% and 100% labels (and guides)
-  const endpoints = [0, 100];
-  endpoints.forEach(P => {
+  [0, 100].forEach(P => {
     const qVal = d3.quantileSorted(sortedVals, P / 100);
     if (qVal != null) {
       const qy = y(qVal);
-      // optional guide line
       svg.append('line')
         .attr('x1', plotPaddingLeft)
         .attr('x2', width - plotPaddingRight)
@@ -107,7 +139,6 @@ function renderBeeswarmCategory(metricKey) {
         .attr('stroke', '#e2e8f0')
         .attr('stroke-width', 1)
         .attr('pointer-events', 'none');
-      // label
       svg.append('text')
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
@@ -127,7 +158,7 @@ function renderBeeswarmCategory(metricKey) {
   const simulation = d3.forceSimulation(nodes)
     .force('y', d3.forceY(d => y(d.data.value)).strength(1))
     .force('x', d3.forceX(xCenter).strength(0.05))
-    .force('collide', d3.forceCollide(d => d.r + 1.2))
+    .force('collide', d3.forceCollide(d => d.r + 2.2))
     .stop();
 
   for (let i = 0; i < 200; i++) simulation.tick();
@@ -137,115 +168,97 @@ function renderBeeswarmCategory(metricKey) {
   });
 
   const tooltip = d3.select('#beeswarm-tooltip');
+  const dataGroup = svg.append('g').attr('class', 'beeswarm-points');
 
-  // Create or update circles with smooth transitions
-  let circleGroup = svg.select('.beeswarm-points');
-  if (circleGroup.empty()) {
-    circleGroup = svg.append('g').attr('class', 'beeswarm-points');
-  }
+  const circles = dataGroup.selectAll('circle')
+    .data(nodes, d => d.data.label);
 
-  // Bind data to circles
-  const circles = circleGroup.selectAll('circle')
-    .data(nodes, d => d.data.label); // Use label as key for object constancy
-
-  // Handle entering circles (new data points)
   const enteringCircles = circles.enter()
     .append('circle')
     .attr('cx', d => {
-      // If we have previous positions for this label, start from there
-      const prev = window.appState.previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+      const prev = previousNodes.find(p => p.data && p.data.label === d.data.label);
       return prev ? prev.x : d.x;
     })
     .attr('cy', d => {
-      const prev = window.appState.previousBeeswarmNodes.find(p => p.data.label === d.data.label);
+      const prev = previousNodes.find(p => p.data && p.data.label === d.data.label);
       return prev ? prev.y : d.y;
     })
     .attr('r', d => d.data.label === window.appState.selectedCountry ? d.r + 1.5 : d.r)
-    .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#9b59b6'))
-    .attr('opacity', 0.85);
+    .attr('fill', d => colorScale(d.data.category))
+    .attr('stroke', d => d.data.label === window.appState.selectedCountry ? '#0f172a' : '#ffffff')
+    .attr('stroke-width', d => d.data.label === window.appState.selectedCountry ? 2 : 1)
+    .attr('opacity', 0.92);
 
-  // Handle exiting circles (data points that are no longer present)
   circles.exit().remove();
 
-  // Merge entering and updating circles
   const allCircles = enteringCircles.merge(circles);
 
-  // Animate to new positions
   allCircles.transition()
     .duration(600)
     .ease(d3.easeQuadOut)
     .attr('cx', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
     .attr('cy', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
     .attr('r', d => d.data.label === window.appState.selectedCountry ? d.r + 1.5 : d.r)
-    .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#9b59b6'));
+    .attr('fill', d => colorScale(d.data.category))
+    .attr('stroke', d => d.data.label === window.appState.selectedCountry ? '#0f172a' : '#ffffff')
+    .attr('stroke-width', d => d.data.label === window.appState.selectedCountry ? 2 : 1);
 
-  // Store current positions for next transition
   window.appState.previousBeeswarmNodes = nodes.map(n => ({ ...n }));
 
-  // Add interaction handlers to all circles
+  const groupLabel = hasEncodingField ? encodingLabel : 'Category';
   allCircles
     .on('mouseenter', function(evt, d) {
-      const html = `${d.data.label}<br>Value: ${window.formatValue(d.data.value, metricKey)}<br>Percentile: ${d.data.percentile}%`;
-      tooltip.html(html)
+      const htmlParts = [
+        d.data.label,
+        `Value: ${window.formatValue(d.data.value, metricKey)}`,
+        `Percentile: ${d.data.percentile}%`
+      ];
+      if (hasEncodingField) {
+        htmlParts.push(`${groupLabel}: ${d.data.category}`);
+      }
+      tooltip.html(htmlParts.join('<br>'))
         .classed('hidden', false)
-        .style('left', (evt.offsetX + 32) + 'px') // 20px right from original +12px
-        .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
+        .style('left', (evt.offsetX + 32) + 'px')
+        .style('top', (evt.offsetY - 48) + 'px');
       d3.select(this)
-        .attr('stroke', '#1f6fa5')
-        .attr('stroke-width', 2)
-        .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#c0392b' : '#8e44ad'))
+        .attr('stroke', '#111827')
+        .attr('stroke-width', 2.5)
         .attr('r', d.r + 2.5);
     })
     .on('mousemove', function(evt) {
       tooltip
-        .style('left', (evt.offsetX + 32) + 'px') // 20px right from original +12px
-        .style('top', (evt.offsetY - 48) + 'px'); // 20px up from original -28px
+        .style('left', (evt.offsetX + 32) + 'px')
+        .style('top', (evt.offsetY - 48) + 'px');
     })
     .on('click', function(evt, d) {
-      // Click to select region and refresh current Category view
       const newSelection = d.data.label;
       if (!newSelection) return;
       window.appState.selectedCountry = newSelection;
-      // Sync the dropdown if option exists
       const selectEl = document.getElementById('countrySelect');
       if (selectEl) {
         const exists = Array.from(selectEl.options).some(o => o.value === newSelection);
         if (exists) selectEl.value = newSelection;
       }
-      // Recompute and update UI
       window.calculatePercentiles(window.appState.selectedCountry);
       window.updateCountryInfo();
-      // Re-render current metric for the active category view and refresh labels/gradient
-      if (window.appState && window.appState.viewMode === 'category' && window.renderCategoryMetricList) {
-        window.renderCategoryMetricList();
-      } else if (window.appState && window.appState.viewMode === 'category-v2' && window.renderCategoryMetricListV2) {
-        window.renderCategoryMetricListV2();
-      } else if (window.appState && window.appState.viewMode === 'category-v3' && window.renderCategoryMetricListV3) {
-        window.renderCategoryMetricListV3();
-      } else if (window.appState && window.appState.viewMode === 'category-v4' && window.renderCategoryMetricListV4) {
-        window.renderCategoryMetricListV4();
-      } else if (window.appState && window.appState.viewMode === 'category-v5' && window.renderCategoryMetricListV5) {
-        window.renderCategoryMetricListV5();
-      } else if (window.renderCategoryMetricList) {
-        // Fallback to the original Category view if viewMode not set
-        window.renderCategoryMetricList();
+      if (typeof window.renderCategoryMetricListV6 === 'function') {
+        window.renderCategoryMetricListV6();
       }
       if (window.appState.categorySelectedMetricKey) {
-        window.renderBeeswarmCategory(window.appState.categorySelectedMetricKey);
-      } else if (d && d.data) {
-        // Fallback to re-render current metric key if available in scope
-        window.renderBeeswarmCategory(metricKey);
+        window.renderBeeswarmCategoryEncoded(window.appState.categorySelectedMetricKey);
+      } else {
+        window.renderBeeswarmCategoryEncoded(metricKey);
       }
     })
-    .on('mouseleave', function() {
+    .on('mouseleave', function(evt, d) {
       tooltip.classed('hidden', true);
+      const isSelected = d.data.label === window.appState.selectedCountry;
       d3.select(this)
-        .attr('stroke', 'none')
-        .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#9b59b6'))
-        .attr('r', d => d.r);
+        .attr('stroke', isSelected ? '#0f172a' : '#ffffff')
+        .attr('stroke-width', isSelected ? 2 : 1)
+        .attr('r', isSelected ? d.r + 1.5 : d.r);
     });
 
-  // Hover horizontal line and percentile label
   const hoverLine = svg.append('line')
     .attr('class', 'hover-line')
     .attr('x1', plotPaddingLeft)
@@ -260,7 +273,6 @@ function renderBeeswarmCategory(metricKey) {
     .on('mouseenter', function() {
       hoverLine.style('display', null);
       hoverLabel.classList.remove('hidden');
-      // Ensure no box styling even if CSS is cached
       hoverLabel.style.background = 'transparent';
       hoverLabel.style.border = 'none';
       hoverLabel.style.padding = '0';
@@ -276,13 +288,58 @@ function renderBeeswarmCategory(metricKey) {
       const equal = sortedVals.filter(v => v === hoveredValue).length;
       const p = Math.round((smaller + 0.5 * equal) / sortedVals.length * 100);
       hoverLabel.textContent = `Percentile: ${p}%`;
-      hoverLabel.style.left = '75px'; // Position on left side near y-axis
+      hoverLabel.style.left = '75px';
       hoverLabel.style.top = (clampedY - 6) + 'px';
     })
     .on('mouseleave', function() {
       hoverLine.style('display', 'none');
       hoverLabel.classList.add('hidden');
     });
+
+  if (hasEncodingField && categories.length > 0) {
+    const maxLegendItems = 16;
+    const legendCategories = categories.slice(0, maxLegendItems);
+    const legend = svg.append('g').attr('class', 'encoded-legend');
+    const legendX = (width - plotPaddingRight) - 110;
+    let legendY = plotPaddingTop + 12;
+
+    legend.append('text')
+      .attr('x', legendX)
+      .attr('y', legendY - 18)
+      .attr('fill', '#1f2937')
+      .attr('font-size', 12)
+      .attr('font-weight', 'bold')
+      .text(`Color: ${encodingLabel}`);
+
+    legendCategories.forEach((cat, idx) => {
+      const rowY = legendY + idx * 16;
+      const row = legend.append('g').attr('transform', `translate(0, ${rowY})`);
+      row.append('rect')
+        .attr('x', legendX)
+        .attr('y', -9)
+        .attr('width', 12)
+        .attr('height', 12)
+        .attr('fill', colorScale(cat))
+        .attr('stroke', '#334155')
+        .attr('stroke-width', 0.5);
+      row.append('text')
+        .attr('x', legendX + 16)
+        .attr('y', 0)
+        .attr('fill', '#475569')
+        .attr('font-size', 10)
+        .attr('dominant-baseline', 'middle')
+        .text(cat);
+    });
+
+    if (categories.length > maxLegendItems) {
+      legend.append('text')
+        .attr('x', legendX)
+        .attr('y', legendY + maxLegendItems * 16)
+        .attr('fill', '#475569')
+        .attr('font-size', 10)
+        .text(`(+${categories.length - maxLegendItems} more)`);
+    }
+  }
 
   svg.append('text')
     .attr('x', plotPaddingLeft + 6)
@@ -293,6 +350,5 @@ function renderBeeswarmCategory(metricKey) {
     .text(window.formatMetricName(metricKey));
 }
 
-// Export functions
-window.renderBeeswarmCategory = renderBeeswarmCategory;
+window.renderBeeswarmCategoryEncoded = renderBeeswarmCategoryEncoded;
 

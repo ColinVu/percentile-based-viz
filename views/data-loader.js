@@ -282,11 +282,45 @@ function processData() {
     }
   }
   
+  // Update nominal columns for encoded color view
+  window.appState.nominalColumns = window.getNominalColumns();
+  if (window.appState.nominalColumns.length > 0) {
+    if (!window.appState.categoryEncodedField || !window.appState.nominalColumns.includes(window.appState.categoryEncodedField)) {
+      window.appState.categoryEncodedField = window.appState.nominalColumns[0];
+    }
+  } else {
+    window.appState.categoryEncodedField = '';
+  }
+  if (typeof window.refreshEncodedColorDropdown === 'function') {
+    window.refreshEncodedColorDropdown();
+  }
+  
   if (window.appState.selectedCountry) {
     window.calculatePercentiles(window.appState.selectedCountry);
     window.updateCountryInfo();
     if (window.updateMetricsDisplay) {
       window.updateMetricsDisplay(50);
+    }
+  }
+
+  if (window.appState.selectedCountry) {
+    window.appState.multiSelectedLabels = [window.appState.selectedCountry];
+  } else {
+    window.appState.multiSelectedLabels = [];
+  }
+  if (typeof window.multiSelectUpdateBox === 'function') {
+    window.multiSelectUpdateBox();
+  }
+
+  window.appState.filterSelectFilters = [];
+  window.appState.filterSelectFilteredRows = window.appState.jsonData.slice();
+  if (typeof window.filterSelectRenderControls === 'function') {
+    window.filterSelectRenderControls();
+  }
+  if (window.appState.viewMode === 'category-v8' && typeof window.renderCategoryMetricListV8 === 'function') {
+    window.renderCategoryMetricListV8();
+    if (window.appState.categorySelectedMetricKey) {
+      window.renderBeeswarmCategoryFilter(window.appState.categorySelectedMetricKey);
     }
   }
 }

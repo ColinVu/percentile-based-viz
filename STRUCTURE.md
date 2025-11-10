@@ -23,6 +23,7 @@ All view logic has been extracted into separate JavaScript modules:
 - `category-slider.js` - Category Slider (Distributed) (percentile-based positioning)
 - `category-slider-v2.js` - Category Slider (Color ramp) (evenly spaced labels)
 - `category-slider-v3.js` - Category Slider (Country Detailed) (country code labels)
+- `category-slider-v5.js` - Category Slider (Comparison) (evenly spaced labels with comparison)
 - `box-whisker.js` - Box and Whisker view
 - `beeswarm-category.js` - Beeswarm rendering for category sliders
 - `beeswarm-category-v3.js` - Beeswarm rendering with country codes/continents

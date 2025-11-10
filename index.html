@@ -74,16 +74,55 @@
           <option value="category">Category Slider (Distributed)</option>
           <option value="category-v2">Category Slider (Color ramp)</option>
           <option value="category-v3">Category Slider (Country Detailed)</option>
+          <option value="category-v6">Category Slider (Encoded Data)</option>
+          <option value="category-v7">Category Slider (Multi-Select)</option>
+          <option value="category-v8">Filter Select</option>
           <option value="category-v4">Category Slider (County Detailed)</option>
+          <option value="category-v5">Category Slider (Comparison)</option>
           <option value="box">Box and Whisker</option>
         </select>
       </div>
 
       <div class="control-section" id="location-section">
         <h3>Location</h3>
-        <select id="countrySelect">
-          <option value="">Select an area...</option>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="radio" id="selectMainLocation" name="activeLocation" value="main" style="display: none;">
+          <select id="countrySelect" style="flex: 1;">
+            <option value="">Select an area...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="control-section" id="multi-select-section" style="display: none;">
+        <h3>Selected Areas</h3>
+        <div class="multi-selection-box" id="multi-selection-box">
+          <div class="multi-selection-title">Primary + Secondary</div>
+          <div class="multi-selection-list" id="multi-selection-list"></div>
+        </div>
+      </div>
+
+      <div class="control-section" id="encoded-color-section" style="display: none;">
+        <h3>Color Encoding</h3>
+        <select id="encodedColorSelect">
+          <option value="">Categorical column not available</option>
         </select>
+      </div>
+
+      <div class="control-section" id="filter-select-section" style="display: none;">
+        <h3>Filters</h3>
+        <div class="filter-select-info" id="filter-select-info">Add filters to narrow the dataset.</div>
+        <div class="filter-select-list" id="filter-select-filters"></div>
+        <button id="filter-select-add" class="filter-select-add-btn" type="button">Add Filter</button>
+      </div>
+
+      <div class="control-section" id="comparison-location-section" style="display: none;">
+        <h3>Comparison Location</h3>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="radio" id="selectComparisonLocation" name="activeLocation" value="comparison">
+          <select id="comparisonCountrySelect" style="flex: 1;">
+            <option value="">Select an area to compare...</option>
+          </select>
+        </div>
       </div>
 
       <div class="control-section" id="state-section" style="display: none;">
@@ -151,7 +190,14 @@
   <script src="views/category-slider-v2.js"></script>
   <script src="views/beeswarm-category-v3.js"></script>
   <script src="views/category-slider-v3.js"></script>
+  <script src="views/beeswarm-category-encoded.js"></script>
+  <script src="views/category-slider-v6.js"></script>
+  <script src="views/beeswarm-category-multiselect.js"></script>
+  <script src="views/category-slider-v7.js"></script>
+  <script src="views/beeswarm-category-filter.js"></script>
+  <script src="views/category-slider-v8.js"></script>
   <script src="views/category-slider-v4.js"></script>
+  <script src="views/category-slider-v5.js"></script>
   <script src="views/box-plot.js"></script>
   <script src="views/box-whisker.js"></script>
 
@@ -245,6 +291,32 @@
       // Auto-select first county if available
       if (counties.length > 0) {
         countySelect.value = counties[0];
+      }
+    }
+    
+    // Function to populate comparison dropdown with same data as main dropdown
+    function populateComparisonDropdown() {
+      const countrySelect = document.getElementById('countrySelect');
+      const comparisonSelect = document.getElementById('comparisonCountrySelect');
+      
+      if (!countrySelect || !comparisonSelect) return;
+      
+      // Clear existing options
+      comparisonSelect.innerHTML = '<option value="">Select an area to compare...</option>';
+      
+      // Copy all options from main dropdown except the placeholder
+      Array.from(countrySelect.options).forEach(option => {
+        if (option.value !== '') {
+          const newOption = document.createElement('option');
+          newOption.value = option.value;
+          newOption.textContent = option.textContent;
+          comparisonSelect.appendChild(newOption);
+        }
+      });
+      
+      // Initialize comparison country in appState if not set
+      if (!window.appState.comparisonCountry) {
+        window.appState.comparisonCountry = '';
       }
     }
     
@@ -548,6 +620,83 @@
       const sidebarToggle = document.getElementById('sidebar-toggle');
       const sidebar = document.getElementById('sidebar');
       const arrow = sidebarToggle.querySelector('.arrow');
+      const encodedSection = document.getElementById('encoded-color-section');
+      const encodedSelect = document.getElementById('encodedColorSelect');
+      const multiSelectSection = document.getElementById('multi-select-section');
+      const filterSelectSection = document.getElementById('filter-select-section');
+      const filterSelectAddBtn = document.getElementById('filter-select-add');
+      
+      function refreshEncodedColorDropdown() {
+        if (!encodedSelect) return;
+        const columns = Array.isArray(window.appState.nominalColumns) && window.appState.nominalColumns.length > 0
+          ? window.appState.nominalColumns
+          : (typeof window.getNominalColumns === 'function' ? window.getNominalColumns() : []);
+        
+        encodedSelect.innerHTML = '';
+        
+        if (!columns || columns.length === 0) {
+          encodedSelect.disabled = true;
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = 'No categorical columns available';
+          encodedSelect.appendChild(option);
+          return;
+        }
+        
+        encodedSelect.disabled = false;
+        const fragment = document.createDocumentFragment();
+        columns.forEach(col => {
+          const option = document.createElement('option');
+          option.value = col;
+          option.textContent = window.formatMetricName ? window.formatMetricName(col) : col;
+          fragment.appendChild(option);
+        });
+        encodedSelect.appendChild(fragment);
+        
+        const targetValue = (window.appState.categoryEncodedField && columns.includes(window.appState.categoryEncodedField))
+          ? window.appState.categoryEncodedField
+          : columns[0];
+        encodedSelect.value = targetValue;
+        window.appState.categoryEncodedField = targetValue;
+      }
+      
+      function showMultiSelectSection(show) {
+        if (!multiSelectSection) return;
+        multiSelectSection.style.display = show ? 'block' : 'none';
+        if (show && typeof window.multiSelectUpdateBox === 'function') {
+          window.multiSelectUpdateBox();
+        }
+      }
+
+      function showFilterSelectSection(show) {
+        if (!filterSelectSection) return;
+        filterSelectSection.style.display = show ? 'block' : 'none';
+        if (show && typeof window.filterSelectRenderControls === 'function') {
+          window.filterSelectRenderControls();
+        }
+      }
+
+      window.refreshEncodedColorDropdown = refreshEncodedColorDropdown;
+      refreshEncodedColorDropdown();
+      showMultiSelectSection(window.appState.viewMode === 'category-v7');
+      showFilterSelectSection(window.appState.viewMode === 'category-v8');
+      
+      if (encodedSelect) {
+        encodedSelect.addEventListener('change', function() {
+          window.appState.categoryEncodedField = this.value;
+          if (window.appState.viewMode === 'category-v6' && window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryEncoded === 'function') {
+            window.renderBeeswarmCategoryEncoded(window.appState.categorySelectedMetricKey);
+          }
+        });
+      }
+
+      if (filterSelectAddBtn) {
+        filterSelectAddBtn.addEventListener('click', function() {
+          if (typeof window.filterSelectAddFilter === 'function') {
+            window.filterSelectAddFilter();
+          }
+        });
+      }
       
       function toggleSidebar() {
         const isOpen = sidebar.classList.contains('open');
@@ -592,6 +741,30 @@
             if (window.appState.categorySelectedMetricKey) {
               console.log('Re-rendering category v4 view:', window.appState.categorySelectedMetricKey);
               renderBeeswarmCategoryV4(window.appState.categorySelectedMetricKey);
+            }
+          } else if (viewMode === 'category-v6') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && typeof window.renderBeeswarmCategoryEncoded === 'function') {
+              console.log('Re-rendering category v6 (encoded) view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryEncoded(activeMetric.dataset.metricKey);
+            }
+          } else if (viewMode === 'category-v7') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && typeof window.renderBeeswarmCategoryMultiSelect === 'function') {
+              console.log('Re-rendering category v7 (multi-select) view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryMultiSelect(activeMetric.dataset.metricKey);
+            }
+          } else if (viewMode === 'category-v8') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && typeof window.renderBeeswarmCategoryFilter === 'function') {
+              console.log('Re-rendering category v8 (filter select) view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryFilter(activeMetric.dataset.metricKey);
+            }
+          } else if (viewMode === 'category-v5') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && window.renderBeeswarmCategoryComparison) {
+              console.log('Re-rendering category v5 (comparison) view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryComparison(activeMetric.dataset.metricKey);
             }
           } else if (viewMode === 'box') {
             const activeMetric = document.querySelector('.indicator-list .category-label.active');
@@ -671,6 +844,7 @@
             if (window.appState.viewMode === 'category-v4') {
               populateStateDropdown();
             }
+          showFilterSelectSection(window.appState.viewMode === 'category-v8');
           }
         });
       });
@@ -776,11 +950,46 @@
               window.renderBeeswarmCategoryV3(firstMetricBtn.dataset.metricKey);
               firstMetricBtn.classList.add('active');
             }
+          } else if (window.appState.viewMode === 'category-v6') {
+            if (typeof window.renderCategoryMetricListV6 === 'function') {
+              window.renderCategoryMetricListV6();
+            }
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey && typeof window.renderBeeswarmCategoryEncoded === 'function') {
+              window.renderBeeswarmCategoryEncoded(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (window.appState.viewMode === 'category-v7') {
+            if (typeof window.multiSelectSetPrimary === 'function') {
+              window.multiSelectSetPrimary(window.appState.selectedCountry, { preserveOthers: false });
+            }
+            if (typeof window.renderCategoryMetricListV7 === 'function') {
+              window.renderCategoryMetricListV7();
+            }
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey && typeof window.renderBeeswarmCategoryMultiSelect === 'function') {
+              window.renderBeeswarmCategoryMultiSelect(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (window.appState.viewMode === 'category-v8') {
+            if (typeof window.filterSelectEnsureState === 'function') {
+              window.filterSelectEnsureState();
+            }
+            if (typeof window.renderCategoryMetricListV8 === 'function') {
+              window.renderCategoryMetricListV8({ preserveSelection: true });
+            }
           } else if (window.appState.viewMode === 'category-v4') {
             window.renderCategoryMetricListV4();
             const firstMetricBtn = document.querySelector('.indicator-list .category-label');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
               renderBeeswarmCategoryV4(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (window.appState.viewMode === 'category-v5') {
+            window.renderCategoryMetricListV5();
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              window.renderBeeswarmCategoryComparison(firstMetricBtn.dataset.metricKey);
               firstMetricBtn.classList.add('active');
             }
           } else if (window.appState.viewMode === 'box') {
@@ -791,6 +1000,8 @@
               firstMetricBtn.classList.add('active');
             }
           }
+          showMultiSelectSection(window.appState.viewMode === 'category-v7');
+          showFilterSelectSection(window.appState.viewMode === 'category-v8');
         } else {
           // No selection, reset display
           document.getElementById('country-name').textContent = window.appState.geoMode === 'country' ? 'Select a country' : 'Select a county';
@@ -798,6 +1009,35 @@
             (window.appState.geoMode === 'country' 
               ? '<div class="no-metrics">Please select a country to view metrics</div>'
               : '<div class="no-metrics">Please select a county to view metrics</div>');
+          showMultiSelectSection(false);
+          showFilterSelectSection(false);
+        }
+      });
+
+      // Comparison country selection change event
+      document.getElementById('comparisonCountrySelect').addEventListener('change', function() {
+        window.appState.comparisonCountry = this.value;
+        // Re-render the beeswarm and metrics list if in comparison view
+        if (window.appState.viewMode === 'category-v5') {
+          if (window.renderCategoryMetricListV5) {
+            window.renderCategoryMetricListV5();
+          }
+          if (window.appState.categorySelectedMetricKey) {
+            window.renderBeeswarmCategoryComparison(window.appState.categorySelectedMetricKey);
+          }
+        }
+      });
+
+      // Radio button event listeners for comparison view
+      document.getElementById('selectMainLocation').addEventListener('change', function() {
+        if (this.checked) {
+          window.appState.activeLocationSelection = 'main';
+        }
+      });
+      
+      document.getElementById('selectComparisonLocation').addEventListener('change', function() {
+        if (this.checked) {
+          window.appState.activeLocationSelection = 'comparison';
         }
       });
 
@@ -811,20 +1051,59 @@
           
           // Show/hide location controls based on view mode
           const locationSection = document.getElementById('location-section');
+          const comparisonLocationSection = document.getElementById('comparison-location-section');
           const stateSection = document.getElementById('state-section');
           const countySection = document.getElementById('county-section');
           
           if (this.value === 'category-v4') {
             locationSection.style.display = 'none';
+            comparisonLocationSection.style.display = 'none';
             stateSection.style.display = 'block';
             countySection.style.display = 'block';
             // Populate state dropdown when switching to V4
             populateStateDropdown();
-          } else {
+          } else if (this.value === 'category-v5') {
             locationSection.style.display = 'block';
+            comparisonLocationSection.style.display = 'block';
             stateSection.style.display = 'none';
             countySection.style.display = 'none';
+            // Show radio buttons for comparison view
+            document.getElementById('selectMainLocation').style.display = 'inline-block';
+            document.getElementById('selectComparisonLocation').style.display = 'inline-block';
+            document.getElementById('selectMainLocation').checked = true;
+            window.appState.activeLocationSelection = 'main';
+            // Populate comparison dropdown when switching to V5
+            populateComparisonDropdown();
+          } else if (this.value === 'category-v8') {
+            locationSection.style.display = 'none';
+            comparisonLocationSection.style.display = 'none';
+            stateSection.style.display = 'none';
+            countySection.style.display = 'none';
+            document.getElementById('selectMainLocation').style.display = 'none';
+            if (document.getElementById('selectComparisonLocation')) {
+              document.getElementById('selectComparisonLocation').style.display = 'none';
+            }
+          } else {
+            locationSection.style.display = 'block';
+            comparisonLocationSection.style.display = 'none';
+            stateSection.style.display = 'none';
+            countySection.style.display = 'none';
+            // Hide radio buttons for non-comparison views
+            document.getElementById('selectMainLocation').style.display = 'none';
+            if (document.getElementById('selectComparisonLocation')) {
+              document.getElementById('selectComparisonLocation').style.display = 'none';
+            }
           }
+          if (encodedSection) {
+            if (this.value === 'category-v6') {
+              encodedSection.style.display = 'block';
+              refreshEncodedColorDropdown();
+            } else {
+              encodedSection.style.display = 'none';
+            }
+          }
+          showMultiSelectSection(this.value === 'category-v7');
+          showFilterSelectSection(this.value === 'category-v8');
           if (this.value === 'identifier') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
@@ -865,6 +1144,51 @@
               window.renderBeeswarmCategoryV3(firstMetricBtn.dataset.metricKey);
               firstMetricBtn.classList.add('active');
             }
+          } else if (this.value === 'category-v6') {
+            pctContainer.classList.add('hidden');
+            idContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Category Slider (Encoded Data)';
+            if (typeof window.renderCategoryMetricListV6 === 'function') {
+              window.renderCategoryMetricListV6();
+            }
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey && typeof window.renderBeeswarmCategoryEncoded === 'function') {
+              window.renderBeeswarmCategoryEncoded(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (this.value === 'category-v7') {
+            pctContainer.classList.add('hidden');
+            idContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Category Slider (Multi-Select)';
+            if (typeof window.multiSelectEnsureState === 'function') {
+              window.multiSelectEnsureState();
+            }
+            if (typeof window.renderCategoryMetricListV7 === 'function') {
+              window.renderCategoryMetricListV7();
+            }
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey && typeof window.renderBeeswarmCategoryMultiSelect === 'function') {
+              window.renderBeeswarmCategoryMultiSelect(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (this.value === 'category-v8') {
+            pctContainer.classList.add('hidden');
+            idContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Filter Select';
+            if (typeof window.filterSelectEnsureState === 'function') {
+              window.filterSelectEnsureState();
+            }
+            if (typeof window.filterSelectRenderControls === 'function') {
+              window.filterSelectRenderControls();
+            }
+            if (typeof window.renderCategoryMetricListV8 === 'function') {
+              window.renderCategoryMetricListV8();
+            }
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey && typeof window.renderBeeswarmCategoryFilter === 'function') {
+              window.renderBeeswarmCategoryFilter(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
           } else if (this.value === 'category-v4') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
@@ -873,6 +1197,16 @@
             const firstMetricBtn = document.querySelector('.indicator-list .category-label');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
               renderBeeswarmCategoryV4(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (this.value === 'category-v5') {
+            pctContainer.classList.add('hidden');
+            idContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Category Slider (Comparison)';
+            window.renderCategoryMetricListV5();
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+              window.renderBeeswarmCategoryComparison(firstMetricBtn.dataset.metricKey);
               firstMetricBtn.classList.add('active');
             }
         } else if (this.value === 'box') {
@@ -930,6 +1264,24 @@
             if (window.appState.categorySelectedMetricKey) {
               console.log('Re-rendering category v4 view:', window.appState.categorySelectedMetricKey);
               renderBeeswarmCategoryV4(window.appState.categorySelectedMetricKey);
+            }
+          } else if (viewMode === 'category-v6') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && typeof window.renderBeeswarmCategoryEncoded === 'function') {
+              console.log('Re-rendering category v6 (encoded) view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryEncoded(activeMetric.dataset.metricKey);
+            }
+          } else if (viewMode === 'category-v7') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && typeof window.renderBeeswarmCategoryMultiSelect === 'function') {
+              console.log('Re-rendering category v7 (multi-select) view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryMultiSelect(activeMetric.dataset.metricKey);
+            }
+          } else if (viewMode === 'category-v5') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && window.renderBeeswarmCategoryComparison) {
+              console.log('Re-rendering category v5 (comparison) view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryComparison(activeMetric.dataset.metricKey);
             }
           } else if (viewMode === 'box') {
             const activeMetric = document.querySelector('.indicator-list .category-label.active');

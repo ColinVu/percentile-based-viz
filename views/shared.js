@@ -14,7 +14,12 @@ window.appState = {
   viewMode: 'percentile', // 'percentile' | 'identifier' | 'category' | 'category-v2' | 'category-v3' | 'box'
   categorySelectedMetricKey: null,
   categorySnapPoints: [],
-  previousBeeswarmNodes: [] // Store previous node positions for smooth transitions
+  previousBeeswarmNodes: [], // Store previous node positions for smooth transitions
+  nominalColumns: [],
+  categoryEncodedField: '',
+  multiSelectedLabels: [],
+  filterSelectFilters: [],
+  filterSelectFilteredRows: []
 };
 
 // Format metric names for display
@@ -144,6 +149,38 @@ function getNumericMetrics() {
   return numericMetrics;
 }
 
+// Build list of nominal (categorical) columns
+function getNominalColumns() {
+  if (!window.appState.jsonData || window.appState.jsonData.length === 0) return [];
+  const sample = window.appState.jsonData[0];
+  const exclusionCols = new Set(['__displayName']);
+  const keys = Object.keys(sample).filter(k => !exclusionCols.has(k));
+  const nominalKeys = keys.filter(key => {
+    // Skip numeric metrics (requires at least one truly non-numeric value)
+    let hasCategoricalValue = false;
+    let encounteredValidValue = false;
+    for (const row of window.appState.jsonData) {
+      const raw = row[key];
+      if (raw === undefined || raw === null) continue;
+      if (typeof raw === 'string' && raw.trim() === '') continue;
+      if (raw === '..') continue;
+      encounteredValidValue = true;
+      if (typeof raw === 'boolean') {
+        hasCategoricalValue = true;
+        break;
+      }
+      const valueStr = String(raw).trim();
+      if (valueStr === '') continue;
+      if (isNaN(Number(valueStr))) {
+        hasCategoricalValue = true;
+        break;
+      }
+    }
+    return encounteredValidValue && hasCategoricalValue;
+  });
+  return nominalKeys;
+}
+
 // Format values based on metric type
 function formatValue(value, metric) {
   // Apply specific formatting based on metric name
@@ -173,6 +210,7 @@ window.getPercentileColor = getPercentileColor;
 window.createPercentileGradient = createPercentileGradient;
 window.calculatePercentiles = calculatePercentiles;
 window.getNumericMetrics = getNumericMetrics;
+window.getNominalColumns = getNominalColumns;
 window.formatValue = formatValue;
 window.updateCountryInfo = updateCountryInfo;
 

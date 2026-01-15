@@ -28,9 +28,14 @@ function renderBeeswarmCategoryFilter(metricKey) {
       const raw = row[metricKey];
       const v = typeof raw === 'number' ? raw : parseFloat(raw);
       if (raw === '..' || raw === undefined || raw === null || Number.isNaN(v)) return null;
-      const label = window.appState.geoMode === 'country'
-        ? row.Country
-        : (row.__displayName || `${(row.County || '').toString().trim()}, ${(row.State || '').toString().trim()}`);
+      let label;
+      if (window.appState.geoMode === 'country') {
+        label = row.Country;
+      } else if (window.appState.geoMode === 'county') {
+        label = row.__displayName || `${(row.County || '').toString().trim()}, ${(row.State || '').toString().trim()}`;
+      } else {
+        label = row[window.appState.dataColumn];
+      }
       if (!label) return null;
       const isFiltered = filteredRows.includes(row);
       return { label, value: v, highlighted: isFiltered };

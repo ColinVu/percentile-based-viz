@@ -9,7 +9,9 @@ window.appState = {
   entities: [],
   currentPercentiles: {},
   selectedCountry: '',
-  geoMode: 'country', // 'country' or 'county'
+  geoMode: 'country', // 'country' or 'county' or 'custom'
+  dataColumn: null, // The column to use as the main identifier (e.g., 'Country', 'County', or custom)
+  selectedDataColumn: null, // The column selected by the user for custom datasets
   scroller: null,
   viewMode: 'percentile', // 'percentile' | 'identifier' | 'category' | 'category-v2' | 'category-v3' | 'box'
   categorySelectedMetricKey: null,
@@ -90,16 +92,28 @@ function calculatePercentiles(entityLabel) {
   let entityData = null;
   if (window.appState.geoMode === 'country') {
     entityData = window.appState.jsonData.find(d => d.Country === entityLabel);
-  } else {
+  } else if (window.appState.geoMode === 'county') {
     entityData = window.appState.jsonData.find(d => {
       const label = d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`;
       return label === entityLabel;
     });
+  } else {
+    // Custom column mode
+    const dataColumn = window.appState.dataColumn;
+    entityData = window.appState.jsonData.find(d => String(d[dataColumn]).trim() === entityLabel);
   }
   if (!entityData) return;
   
   // Get all metrics (skip identifier columns)
-  const idCols = window.appState.geoMode === 'country' ? ['Country'] : ['County', 'State', '__displayName'];
+  let idCols = [];
+  if (window.appState.geoMode === 'country') {
+    idCols = ['Country'];
+  } else if (window.appState.geoMode === 'county') {
+    idCols = ['County', 'State', '__displayName'];
+  } else {
+    // Custom mode - skip the data column
+    idCols = [window.appState.dataColumn];
+  }
   const metrics = Object.keys(entityData).filter(key => !idCols.includes(key));
   
   // Calculate percentile for each metric
@@ -141,7 +155,15 @@ function calculatePercentiles(entityLabel) {
 function getNumericMetrics() {
   if (!window.appState.jsonData || window.appState.jsonData.length === 0) return [];
   const sample = window.appState.jsonData[0];
-  const idCols = window.appState.geoMode === 'country' ? ['Country'] : ['County', 'State', '__displayName'];
+  let idCols = [];
+  if (window.appState.geoMode === 'country') {
+    idCols = ['Country'];
+  } else if (window.appState.geoMode === 'county') {
+    idCols = ['County', 'State', '__displayName'];
+  } else {
+    // Custom mode
+    idCols = [window.appState.dataColumn];
+  }
   const keys = Object.keys(sample).filter(k => !idCols.includes(k));
   const numericMetrics = keys.filter(key => {
     return window.appState.jsonData.some(d => d[key] !== '..' && d[key] !== undefined && d[key] !== null && !isNaN(parseFloat(d[key])));

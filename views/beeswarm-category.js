@@ -226,6 +226,8 @@ function renderBeeswarmCategory(metricKey) {
         window.renderCategoryMetricListV4();
       } else if (window.appState && window.appState.viewMode === 'category-v5' && window.renderCategoryMetricListV5) {
         window.renderCategoryMetricListV5();
+      } else if (window.appState && window.appState.viewMode === 'category-final' && window.renderCategoryMetricListFinal) {
+        window.renderCategoryMetricListFinal();
       } else if (window.renderCategoryMetricList) {
         // Fallback to the original Category view if viewMode not set
         window.renderCategoryMetricList();

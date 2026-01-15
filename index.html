@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Development Indicators - Percentile Scroll</title>
+  <title>Faxis</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/scrollama/3.2.0/scrollama.min.js"></script>
   
 </head>
@@ -44,29 +45,6 @@
     
     <div class="sidebar-content">
       <div class="control-section">
-        <h3>Dataset</h3>
-        <div class="dataset-options">
-          <label class="dataset-option">
-            <input type="radio" name="dataset" value="us-counties" checked>
-            <span>US County Indicators</span>
-          </label>
-          <label class="dataset-option">
-            <input type="radio" name="dataset" value="country-development">
-            <span>Country Development Indicators</span>
-          </label>
-          <label class="dataset-option">
-            <input type="radio" name="dataset" value="custom">
-            <span>Custom Dataset</span>
-            <div class="custom-upload" id="custom-upload" style="display: none;">
-              <label for="file-input" class="file-upload">Upload</label>
-              <input type="file" id="file-input" accept=".xlsx,.xls">
-              <span class="file-name" id="file-name">No file selected</span>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <div class="control-section">
         <h3>View Mode</h3>
         <select class="toggle-view-select" id="toggle-view">
           <option value="percentile" selected>Percentile Scroll</option>
@@ -75,12 +53,47 @@
           <option value="category-v2">Category Slider (Color ramp)</option>
           <option value="category-v3">Category Slider (Country Detailed)</option>
           <option value="category-v6">Category Slider (Encoded Data)</option>
+          <option value="category-final">Faxis</option>
           <option value="category-v7">Category Slider (Multi-Select)</option>
           <option value="category-v8">Filter Select</option>
           <option value="category-v4">Category Slider (County Detailed)</option>
           <option value="category-v5">Category Slider (Comparison)</option>
           <option value="box">Box and Whisker</option>
         </select>
+      </div>
+
+      <div class="control-section" id="filter-select-section" style="display: none;">
+        <h3 class="collapsible-header" id="filter-section-header">
+          <span>Filters</span>
+          <span class="collapse-arrow">&#9660;</span>
+        </h3>
+        <div class="collapsible-content" id="filter-section-content">
+          <div class="filter-select-info" id="filter-select-info">Add filters to narrow the dataset.</div>
+          <div class="filter-select-list" id="filter-select-filters"></div>
+          <button id="filter-select-add" class="filter-select-add-btn" type="button">Add Filter</button>
+        </div>
+      </div>
+
+      <div class="control-section" id="encoding-mode-section" style="display: none;">
+        <h3>Encoding Mode</h3>
+        <div class="encoding-mode-options">
+          <label class="encoding-mode-option">
+            <input type="radio" name="encodingMode" value="selection" checked>
+            <span>Encode by Selection</span>
+          </label>
+          <label class="encoding-mode-option">
+            <input type="radio" name="encodingMode" value="feature">
+            <span>Encode by Feature</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="control-section" id="selection-table-section" style="display: none;">
+        <h3>Selected Locations</h3>
+        <div class="selection-table-container" id="selection-table-container">
+          <div class="selection-table" id="selection-table"></div>
+          <button class="selection-table-add-btn" id="selection-table-add" title="Add location">+</button>
+        </div>
       </div>
 
       <div class="control-section" id="location-section">
@@ -108,11 +121,11 @@
         </select>
       </div>
 
-      <div class="control-section" id="filter-select-section" style="display: none;">
-        <h3>Filters</h3>
-        <div class="filter-select-info" id="filter-select-info">Add filters to narrow the dataset.</div>
-        <div class="filter-select-list" id="filter-select-filters"></div>
-        <button id="filter-select-add" class="filter-select-add-btn" type="button">Add Filter</button>
+      <div class="control-section" id="text-encoding-section" style="display: none;">
+        <h3>Text Encoding</h3>
+        <select id="textEncodingSelect">
+          <option value="">None</option>
+        </select>
       </div>
 
       <div class="control-section" id="comparison-location-section" style="display: none;">
@@ -141,9 +154,27 @@
     </div>
   </div>
 
-  <!-- Main Header (simplified) -->
+  <!-- Main Header -->
   <div class="header">
-    <h1 id="app-title">Percentile Scroll</h1>
+    <div class="header-left">
+      <label for="dataset-select" class="header-dataset-label">Dataset</label>
+      <div class="header-dataset">
+        <select id="dataset-select">
+          <option value="us-counties" selected>US County Indicators</option>
+          <option value="country-development">Country Development Indicators</option>
+          <option value="custom">Custom Dataset</option>
+        </select>
+        <div class="custom-upload" id="custom-upload" style="display: none;">
+          <label for="file-input" class="file-upload">Upload</label>
+          <input type="file" id="file-input" accept=".xlsx,.xls">
+          <span class="file-name" id="file-name">No file selected</span>
+        </div>
+      </div>
+    </div>
+    <div class="header-center">
+      <h1 id="app-title">Percentile Scroll</h1>
+    </div>
+    <div class="header-right"></div>
   </div>
   
   <div class="percentile-scroll-container" id="percentile-scroll-container">
@@ -173,12 +204,41 @@
         <svg id="beeswarm-svg"></svg>
         <div class="tooltip hidden" id="beeswarm-tooltip"></div>
         <div class="hover-label hidden" id="beeswarm-hover-label"></div>
+        
+        <!-- Map Panel Popup (resizable) -->
+        <div id="map-panel-popup" class="map-popup" style="display: none;">
+          <div class="map-popup-header" id="map-popup-header">
+            <button class="map-popup-close" id="map-popup-close">×</button>
+          </div>
+          <div class="map-popup-content">
+            <svg id="map-svg" width="380" height="300"></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column Selection Dialog -->
+  <div id="column-selection-dialog" class="modal-overlay" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Select data column to visualize</h3>
+      </div>
+      <div class="modal-body">
+        <div class="column-list" id="column-selection-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="column-selection-cancel" class="modal-btn modal-btn-cancel">Cancel</button>
+        <button id="column-selection-ok" class="modal-btn modal-btn-ok">OK</button>
       </div>
     </div>
   </div>
 
   <!-- Include SheetJS library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
+  <!-- Load SimilarityIndex for finding similar records -->
+  <script src="SimilarityIndex.js"></script>
   
   <!-- Load modular view components -->
   <script src="views/shared.js"></script>
@@ -192,6 +252,9 @@
   <script src="views/category-slider-v3.js"></script>
   <script src="views/beeswarm-category-encoded.js"></script>
   <script src="views/category-slider-v6.js"></script>
+  <script src="views/beeswarm-category-final.js"></script>
+  <script src="views/category-slider-final.js"></script>
+  <script src="views/map-panel.js"></script>
   <script src="views/beeswarm-category-multiselect.js"></script>
   <script src="views/category-slider-v7.js"></script>
   <script src="views/beeswarm-category-filter.js"></script>
@@ -620,8 +683,12 @@
       const sidebarToggle = document.getElementById('sidebar-toggle');
       const sidebar = document.getElementById('sidebar');
       const arrow = sidebarToggle.querySelector('.arrow');
+      const encodingModeSection = document.getElementById('encoding-mode-section');
+      const locationSection = document.getElementById('location-section');
       const encodedSection = document.getElementById('encoded-color-section');
       const encodedSelect = document.getElementById('encodedColorSelect');
+      const textEncodingSection = document.getElementById('text-encoding-section');
+      const textEncodingSelect = document.getElementById('textEncodingSelect');
       const multiSelectSection = document.getElementById('multi-select-section');
       const filterSelectSection = document.getElementById('filter-select-section');
       const filterSelectAddBtn = document.getElementById('filter-select-add');
@@ -634,12 +701,14 @@
         
         encodedSelect.innerHTML = '';
         
+        // Always add "None" option first
+        const noneOption = document.createElement('option');
+        noneOption.value = '';
+        noneOption.textContent = 'None';
+        encodedSelect.appendChild(noneOption);
+        
         if (!columns || columns.length === 0) {
-          encodedSelect.disabled = true;
-          const option = document.createElement('option');
-          option.value = '';
-          option.textContent = 'No categorical columns available';
-          encodedSelect.appendChild(option);
+          encodedSelect.disabled = false;
           return;
         }
         
@@ -653,11 +722,47 @@
         });
         encodedSelect.appendChild(fragment);
         
+        // Set to current value or default to empty (None)
         const targetValue = (window.appState.categoryEncodedField && columns.includes(window.appState.categoryEncodedField))
           ? window.appState.categoryEncodedField
-          : columns[0];
+          : '';
         encodedSelect.value = targetValue;
         window.appState.categoryEncodedField = targetValue;
+      }
+      
+      function refreshTextEncodingDropdown() {
+        if (!textEncodingSelect) return;
+        // Get ALL columns from the dataset
+        const columns = window.appState.jsonData && window.appState.jsonData.length > 0
+          ? Object.keys(window.appState.jsonData[0])
+          : [];
+        
+        textEncodingSelect.innerHTML = '';
+        
+        // Add "None" option first
+        const noneOption = document.createElement('option');
+        noneOption.value = '';
+        noneOption.textContent = 'None';
+        textEncodingSelect.appendChild(noneOption);
+        
+        if (columns.length > 0) {
+          const fragment = document.createDocumentFragment();
+          // Add all columns
+          columns.forEach(col => {
+            const option = document.createElement('option');
+            option.value = col;
+            option.textContent = window.formatMetricName ? window.formatMetricName(col) : col;
+            fragment.appendChild(option);
+          });
+          textEncodingSelect.appendChild(fragment);
+        }
+        
+        // Set to current value or default to empty (None)
+        const targetValue = (window.appState.categoryTextEncodedField && columns.includes(window.appState.categoryTextEncodedField))
+          ? window.appState.categoryTextEncodedField
+          : '';
+        textEncodingSelect.value = targetValue;
+        window.appState.categoryTextEncodedField = targetValue;
       }
       
       function showMultiSelectSection(show) {
@@ -675,11 +780,364 @@
           window.filterSelectRenderControls();
         }
       }
+      
+      // Collapsible filter section toggle
+      const filterSectionHeader = document.getElementById('filter-section-header');
+      const filterSectionContent = document.getElementById('filter-section-content');
+      
+      // Function to update the filter section height (called when filters are added/removed)
+      function updateFilterSectionHeight() {
+        if (filterSectionContent && !filterSectionHeader.classList.contains('collapsed')) {
+          filterSectionContent.style.maxHeight = filterSectionContent.scrollHeight + 'px';
+        }
+      }
+      window.updateFilterSectionHeight = updateFilterSectionHeight;
+      
+      if (filterSectionHeader && filterSectionContent) {
+        // Start collapsed by default
+        filterSectionHeader.classList.add('collapsed');
+        filterSectionContent.classList.add('collapsed');
+        
+        filterSectionHeader.addEventListener('click', function() {
+          const isCollapsed = filterSectionHeader.classList.contains('collapsed');
+          if (isCollapsed) {
+            filterSectionHeader.classList.remove('collapsed');
+            filterSectionContent.classList.remove('collapsed');
+            filterSectionContent.style.maxHeight = filterSectionContent.scrollHeight + 'px';
+          } else {
+            filterSectionHeader.classList.add('collapsed');
+            filterSectionContent.classList.add('collapsed');
+          }
+        });
+        
+        // Observe changes to the filter list and auto-update height
+        const filterListEl = document.getElementById('filter-select-filters');
+        if (filterListEl) {
+          const observer = new MutationObserver(function() {
+            updateFilterSectionHeight();
+          });
+          observer.observe(filterListEl, { childList: true, subtree: true });
+        }
+      }
+      
+      // Selection table section
+      const selectionTableSection = document.getElementById('selection-table-section');
+      const selectionTableEl = document.getElementById('selection-table');
+      const selectionTableAddBtn = document.getElementById('selection-table-add');
+      
+      // Default colors for selection mode
+      const SELECTION_MODE_COLORS = [
+        '#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', 
+        '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
+        '#14b8a6', '#eab308', '#a855f7', '#22c55e', '#0ea5e9'
+      ];
+      
+      // Initialize selection mode state if not exists
+      if (!window.appState.selectionModeLocations) {
+        window.appState.selectionModeLocations = [];
+      }
+      if (window.appState.selectionModeActiveIndex === undefined) {
+        window.appState.selectionModeActiveIndex = 0;
+      }
+      
+      // Get the next available color
+      function getNextSelectionColor() {
+        const usedColors = window.appState.selectionModeLocations.map(loc => loc.color);
+        for (const color of SELECTION_MODE_COLORS) {
+          if (!usedColors.includes(color)) return color;
+        }
+        // If all colors used, return a random one
+        return SELECTION_MODE_COLORS[Math.floor(Math.random() * SELECTION_MODE_COLORS.length)];
+      }
+      
+      // Render the selection table
+      function renderSelectionTable() {
+        if (!selectionTableEl) return;
+        selectionTableEl.innerHTML = '';
+        
+        const locations = window.appState.selectionModeLocations || [];
+        
+        if (locations.length === 0) {
+          const emptyMsg = document.createElement('div');
+          emptyMsg.className = 'selection-table-empty';
+          emptyMsg.textContent = 'No locations selected. Click + to add.';
+          selectionTableEl.appendChild(emptyMsg);
+          return;
+        }
+        
+        // Get available options from the country select
+        const countrySelect = document.getElementById('countrySelect');
+        const options = countrySelect ? Array.from(countrySelect.options) : [];
+        
+        locations.forEach((loc, idx) => {
+          const row = document.createElement('div');
+          row.className = 'selection-table-row' + (idx === window.appState.selectionModeActiveIndex ? ' active' : '');
+          row.dataset.index = idx;
+          
+          // Color box
+          const colorBox = document.createElement('div');
+          colorBox.className = 'selection-table-color';
+          colorBox.style.backgroundColor = loc.color;
+          colorBox.title = 'Right-click to change color';
+          colorBox.addEventListener('contextmenu', function(evt) {
+            evt.preventDefault();
+            evt.stopPropagation();
+            
+            // Create a simple color input popup
+            const existingInput = document.getElementById('selection-color-input');
+            if (existingInput) existingInput.remove();
+            
+            const inputContainer = document.createElement('div');
+            inputContainer.id = 'selection-color-input';
+            inputContainer.style.cssText = `
+              position: fixed;
+              left: ${evt.clientX + 5}px;
+              top: ${evt.clientY + 5}px;
+              z-index: 10000;
+              background: white;
+              border: 1px solid #cbd5e1;
+              border-radius: 4px;
+              padding: 8px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            `;
+            
+            // Add "Color:" label
+            const colorLabel = document.createElement('div');
+            colorLabel.textContent = 'Color:';
+            colorLabel.style.cssText = `
+              font-size: 10px;
+              color: #64748b;
+              margin-bottom: 4px;
+              font-weight: 500;
+            `;
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = '#FF0000';
+            input.value = loc.color;
+            input.style.cssText = `
+              width: 80px;
+              padding: 4px 8px;
+              font-size: 12px;
+              font-family: monospace;
+              border: 1px solid #e2e8f0;
+              border-radius: 3px;
+              outline: none;
+            `;
+            
+            inputContainer.appendChild(colorLabel);
+            inputContainer.appendChild(input);
+            document.body.appendChild(inputContainer);
+            input.focus();
+            input.select();
+            
+            input.addEventListener('keydown', function(e) {
+              if (e.key === 'Enter') {
+                const newColor = input.value.trim();
+                if (typeof window.isValidHexColor === 'function' && window.isValidHexColor(newColor)) {
+                  loc.color = newColor;
+                  renderSelectionTable();
+                  if (window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+                    window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+                  }
+                }
+                inputContainer.remove();
+              } else if (e.key === 'Escape') {
+                inputContainer.remove();
+              }
+            });
+            
+            input.addEventListener('blur', function() {
+              setTimeout(() => {
+                if (document.body.contains(inputContainer)) {
+                  inputContainer.remove();
+                }
+              }, 100);
+            });
+          });
+          
+          // Dropdown
+          const select = document.createElement('select');
+          const defaultOpt = document.createElement('option');
+          defaultOpt.value = '';
+          defaultOpt.textContent = 'Select location...';
+          select.appendChild(defaultOpt);
+          options.forEach(opt => {
+            if (opt.value) {
+              const newOpt = document.createElement('option');
+              newOpt.value = opt.value;
+              newOpt.textContent = opt.textContent;
+              if (opt.value === loc.location) newOpt.selected = true;
+              select.appendChild(newOpt);
+            }
+          });
+          select.addEventListener('change', function(evt) {
+            evt.stopPropagation();
+            loc.location = this.value;
+            
+            // Sync with main selectedCountry if this is the active row
+            if (idx === window.appState.selectionModeActiveIndex && this.value) {
+              window.appState.selectedCountry = this.value;
+              if (countrySelect) countrySelect.value = this.value;
+              window.calculatePercentiles(this.value);
+              window.updateCountryInfo();
+              if (typeof window.renderCategoryMetricListFinal === 'function') {
+                window.renderCategoryMetricListFinal();
+              }
+            }
+            
+            if (window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+              window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+            }
+          });
+          select.addEventListener('click', function(evt) {
+            evt.stopPropagation();
+          });
+          
+          // Remove button
+          const removeBtn = document.createElement('div');
+          removeBtn.className = 'selection-table-remove';
+          removeBtn.innerHTML = '&times;';  // Use HTML entity for ×
+          removeBtn.title = 'Remove location';
+          removeBtn.addEventListener('click', function(evt) {
+            evt.stopPropagation();
+            window.appState.selectionModeLocations.splice(idx, 1);
+            
+            // Adjust active index if needed
+            if (window.appState.selectionModeActiveIndex >= window.appState.selectionModeLocations.length) {
+              window.appState.selectionModeActiveIndex = Math.max(0, window.appState.selectionModeLocations.length - 1);
+            }
+            
+            // If this was the first row and it's now removed, clear selection
+            if (window.appState.selectionModeLocations.length === 0) {
+              window.appState.selectedCountry = '';
+              if (countrySelect) countrySelect.value = '';
+            } else {
+              // Update selection to the new active row
+              const newActive = window.appState.selectionModeLocations[window.appState.selectionModeActiveIndex];
+              if (newActive && newActive.location) {
+                window.appState.selectedCountry = newActive.location;
+                if (countrySelect) countrySelect.value = newActive.location;
+              }
+            }
+            
+            window.updateCountryInfo();
+            renderSelectionTable();
+            if (typeof window.renderCategoryMetricListFinal === 'function') {
+              window.renderCategoryMetricListFinal();
+            }
+            if (window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+              window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+            }
+          });
+          
+          // Row click to select
+          row.addEventListener('click', function() {
+            window.appState.selectionModeActiveIndex = idx;
+            if (loc.location) {
+              window.appState.selectedCountry = loc.location;
+              if (countrySelect) countrySelect.value = loc.location;
+              window.calculatePercentiles(loc.location);
+              window.updateCountryInfo();
+              if (typeof window.renderCategoryMetricListFinal === 'function') {
+                window.renderCategoryMetricListFinal();
+              }
+            }
+            renderSelectionTable();
+            if (window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+              window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+            }
+          });
+          
+          row.appendChild(colorBox);
+          row.appendChild(select);
+          row.appendChild(removeBtn);
+          selectionTableEl.appendChild(row);
+        });
+      }
+      
+      // Add new location row
+      function addSelectionRow(locationValue = '') {
+        const color = getNextSelectionColor();
+        window.appState.selectionModeLocations.push({
+          location: locationValue,
+          color: color
+        });
+        // Make the new row active
+        window.appState.selectionModeActiveIndex = window.appState.selectionModeLocations.length - 1;
+        renderSelectionTable();
+      }
+      
+      // Initialize selection table from current selected country
+      function initSelectionTableFromCurrent() {
+        if (window.appState.selectionModeLocations.length === 0 && window.appState.selectedCountry) {
+          addSelectionRow(window.appState.selectedCountry);
+        } else if (window.appState.selectionModeLocations.length === 0) {
+          // Add an empty row to start
+          addSelectionRow('');
+        }
+        renderSelectionTable();
+      }
+      
+      if (selectionTableAddBtn) {
+        selectionTableAddBtn.addEventListener('click', function() {
+          addSelectionRow('');
+        });
+      }
+      
+      window.renderSelectionTable = renderSelectionTable;
+      window.addSelectionRow = addSelectionRow;
+      window.initSelectionTableFromCurrent = initSelectionTableFromCurrent;
+      
+      function updateEncodingMode(mode) {
+        if (!encodingModeSection) return;
+        
+        // Store the mode
+        window.appState.encodingMode = mode;
+        
+        if (mode === 'selection') {
+          // Show selection table, hide Location dropdown
+          if (selectionTableSection) {
+            selectionTableSection.style.display = 'block';
+            initSelectionTableFromCurrent();
+          }
+          if (locationSection) locationSection.style.display = 'none';
+          if (encodedSection) encodedSection.style.display = 'none';
+          if (textEncodingSection) textEncodingSection.style.display = 'none';
+          
+          // Set encodings to None
+          window.appState.categoryEncodedField = '';
+          window.appState.categoryTextEncodedField = '';
+          if (encodedSelect) encodedSelect.value = '';
+          if (textEncodingSelect) textEncodingSelect.value = '';
+          
+        } else if (mode === 'feature') {
+          // Hide selection table, show Location, Color Encoding, and Text Encoding
+          if (selectionTableSection) selectionTableSection.style.display = 'none';
+          if (locationSection) locationSection.style.display = 'block';
+          if (encodedSection) {
+            encodedSection.style.display = 'block';
+            refreshEncodedColorDropdown();
+          }
+          if (textEncodingSection) {
+            textEncodingSection.style.display = 'block';
+            refreshTextEncodingDropdown();
+          }
+        }
+        
+        // Re-render if in Final View
+        if (window.appState.viewMode === 'category-final' && window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+          window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+        }
+      }
 
       window.refreshEncodedColorDropdown = refreshEncodedColorDropdown;
+      window.refreshTextEncodingDropdown = refreshTextEncodingDropdown;
+      window.updateEncodingMode = updateEncodingMode;
       refreshEncodedColorDropdown();
+      refreshTextEncodingDropdown();
       showMultiSelectSection(window.appState.viewMode === 'category-v7');
-      showFilterSelectSection(window.appState.viewMode === 'category-v8');
+      showFilterSelectSection(window.appState.viewMode === 'category-v8' || window.appState.viewMode === 'category-final');
       
       if (encodedSelect) {
         encodedSelect.addEventListener('change', function() {
@@ -687,7 +1145,33 @@
           if (window.appState.viewMode === 'category-v6' && window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryEncoded === 'function') {
             window.renderBeeswarmCategoryEncoded(window.appState.categorySelectedMetricKey);
           }
+          if (window.appState.viewMode === 'category-final' && window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+            window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+          }
         });
+      }
+      
+      if (textEncodingSelect) {
+        textEncodingSelect.addEventListener('change', function() {
+          window.appState.categoryTextEncodedField = this.value;
+          if (window.appState.viewMode === 'category-final' && window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+            window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+          }
+        });
+      }
+      
+      // Encoding mode radio buttons
+      document.querySelectorAll('input[name="encodingMode"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+          if (this.checked) {
+            updateEncodingMode(this.value);
+          }
+        });
+      });
+      
+      // Initialize encoding mode (default to 'selection')
+      if (!window.appState.encodingMode) {
+        window.appState.encodingMode = 'selection';
       }
 
       if (filterSelectAddBtn) {
@@ -747,6 +1231,12 @@
             if (activeMetric && activeMetric.dataset.metricKey && typeof window.renderBeeswarmCategoryEncoded === 'function') {
               console.log('Re-rendering category v6 (encoded) view:', activeMetric.dataset.metricKey);
               window.renderBeeswarmCategoryEncoded(activeMetric.dataset.metricKey);
+            }
+          } else if (viewMode === 'category-final') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+              console.log('Re-rendering final view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryFinal(activeMetric.dataset.metricKey);
             }
           } else if (viewMode === 'category-v7') {
             const activeMetric = document.querySelector('.indicator-list .category-label.active');
@@ -825,29 +1315,35 @@
       });
       
       // Dataset selection change event
-      document.querySelectorAll('input[name="dataset"]').forEach(radio => {
-        radio.addEventListener('change', function() {
+      const datasetSelect = document.getElementById('dataset-select');
+      if (datasetSelect) {
+        datasetSelect.addEventListener('change', function() {
           const customUpload = document.getElementById('custom-upload');
-          if (this.value === 'custom') {
-            customUpload.style.display = 'flex';
-          } else {
-            customUpload.style.display = 'none';
-            // Clear file input if switching away from custom
-            const fileInput = document.getElementById('file-input');
-            const fileName = document.getElementById('file-name');
-            fileInput.value = '';
-            fileName.textContent = 'No file selected';
-            // Load the selected dataset
-            window.loadSelectedDataset();
-            
-            // If currently in V4 view, repopulate state dropdown
-            if (window.appState.viewMode === 'category-v4') {
-              populateStateDropdown();
-            }
-          showFilterSelectSection(window.appState.viewMode === 'category-v8');
+          const isCustom = this.value === 'custom';
+          if (customUpload) {
+            customUpload.style.display = isCustom ? 'flex' : 'none';
           }
+          
+          if (isCustom) {
+            return;
+          }
+          
+          // Clear file input if switching away from custom
+          const fileInput = document.getElementById('file-input');
+          const fileName = document.getElementById('file-name');
+          if (fileInput) fileInput.value = '';
+          if (fileName) fileName.textContent = 'No file selected';
+          
+          // Load the selected dataset
+          window.loadSelectedDataset();
+          
+          // If currently in V4 view, repopulate state dropdown
+          if (window.appState.viewMode === 'category-v4') {
+            populateStateDropdown();
+          }
+          showFilterSelectSection(window.appState.viewMode === 'category-v8' || window.appState.viewMode === 'category-final');
         });
-      });
+      }
       
       // File input change event
       document.getElementById('file-input').addEventListener('change', function(e) {
@@ -878,7 +1374,8 @@
               // Convert to JSON
               window.appState.jsonData = XLSX.utils.sheet_to_json(worksheet);
               
-              window.processData();
+              // Show column selection dialog
+              showColumnSelectionDialog();
               
               // If currently in V4 view, repopulate state dropdown
               if (window.appState.viewMode === 'category-v4') {
@@ -919,6 +1416,11 @@
             parseInt(activeStep.getAttribute('data-step')) : 50;
           
           window.updateMetricsDisplay(percentile);
+          
+          // Populate all inline metrics in percentile scroll view
+          if (window.appState.viewMode === 'percentile' && typeof window.populateAllInlineMetrics === 'function') {
+            window.populateAllInlineMetrics();
+          }
 
           // If in identifier/category view, refresh lists and active chart
           const activeMetricBtn = document.querySelector('.indicator-list .indicator-item.active');
@@ -957,6 +1459,15 @@
             const firstMetricBtn = document.querySelector('.indicator-list .category-label');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey && typeof window.renderBeeswarmCategoryEncoded === 'function') {
               window.renderBeeswarmCategoryEncoded(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (window.appState.viewMode === 'category-final') {
+            if (typeof window.renderCategoryMetricListFinal === 'function') {
+              window.renderCategoryMetricListFinal();
+            }
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+              window.renderBeeswarmCategoryFinal(firstMetricBtn.dataset.metricKey);
               firstMetricBtn.classList.add('active');
             }
           } else if (window.appState.viewMode === 'category-v7') {
@@ -1001,7 +1512,7 @@
             }
           }
           showMultiSelectSection(window.appState.viewMode === 'category-v7');
-          showFilterSelectSection(window.appState.viewMode === 'category-v8');
+          showFilterSelectSection(window.appState.viewMode === 'category-v8' || window.appState.viewMode === 'category-final');
         } else {
           // No selection, reset display
           document.getElementById('country-name').textContent = window.appState.geoMode === 'country' ? 'Select a country' : 'Select a county';
@@ -1010,7 +1521,14 @@
               ? '<div class="no-metrics">Please select a country to view metrics</div>'
               : '<div class="no-metrics">Please select a county to view metrics</div>');
           showMultiSelectSection(false);
-          showFilterSelectSection(false);
+          showFilterSelectSection(window.appState.viewMode === 'category-v8' || window.appState.viewMode === 'category-final');
+          
+          // Re-render beeswarm to clear selection highlighting
+          if (window.appState.viewMode === 'category-final' && window.appState.categorySelectedMetricKey) {
+            if (typeof window.renderBeeswarmCategoryFinal === 'function') {
+              window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+            }
+          }
         }
       });
 
@@ -1047,6 +1565,14 @@
         viewToggle.addEventListener('change', function() {
           const pctContainer = document.getElementById('percentile-scroll-container');
           const idContainer = document.getElementById('country-identifier-container');
+          
+          // Cleanup Final View checkbox when switching away
+          if (window.appState.viewMode === 'category-final' && this.value !== 'category-final') {
+            if (typeof window.cleanupFinalViewBeeswarmCheckbox === 'function') {
+              window.cleanupFinalViewBeeswarmCheckbox();
+            }
+          }
+          
           window.appState.viewMode = this.value;
           
           // Show/hide location controls based on view mode
@@ -1094,16 +1620,38 @@
               document.getElementById('selectComparisonLocation').style.display = 'none';
             }
           }
+          // Show/hide encoding mode section
+          if (encodingModeSection) {
+            if (this.value === 'category-final') {
+              encodingModeSection.style.display = 'block';
+              // Initialize or restore encoding mode
+              const currentMode = window.appState.encodingMode || 'selection';
+              const checkedRadio = document.querySelector(`input[name="encodingMode"][value="${currentMode}"]`);
+              if (checkedRadio) checkedRadio.checked = true;
+              updateEncodingMode(currentMode);
+            } else {
+              encodingModeSection.style.display = 'none';
+            }
+          }
+          
+          // For category-v6, show color encoding only
           if (encodedSection) {
             if (this.value === 'category-v6') {
               encodedSection.style.display = 'block';
               refreshEncodedColorDropdown();
-            } else {
+            } else if (this.value !== 'category-final') {
               encodedSection.style.display = 'none';
             }
+            // For category-final, visibility is controlled by encoding mode
           }
+          
+          // Text encoding only for Final View, controlled by encoding mode
+          if (textEncodingSection && this.value !== 'category-final') {
+            textEncodingSection.style.display = 'none';
+          }
+          
           showMultiSelectSection(this.value === 'category-v7');
-          showFilterSelectSection(this.value === 'category-v8');
+          showFilterSelectSection(this.value === 'category-v8' || this.value === 'category-final');
           if (this.value === 'identifier') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
@@ -1154,6 +1702,18 @@
             const firstMetricBtn = document.querySelector('.indicator-list .category-label');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey && typeof window.renderBeeswarmCategoryEncoded === 'function') {
               window.renderBeeswarmCategoryEncoded(firstMetricBtn.dataset.metricKey);
+              firstMetricBtn.classList.add('active');
+            }
+          } else if (this.value === 'category-final') {
+            pctContainer.classList.add('hidden');
+            idContainer.classList.remove('hidden');
+            document.getElementById('app-title').textContent = 'Faxis';
+            if (typeof window.renderCategoryMetricListFinal === 'function') {
+              window.renderCategoryMetricListFinal();
+            }
+            const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+            if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+              window.renderBeeswarmCategoryFinal(firstMetricBtn.dataset.metricKey);
               firstMetricBtn.classList.add('active');
             }
           } else if (this.value === 'category-v7') {
@@ -1271,6 +1831,12 @@
               console.log('Re-rendering category v6 (encoded) view:', activeMetric.dataset.metricKey);
               window.renderBeeswarmCategoryEncoded(activeMetric.dataset.metricKey);
             }
+          } else if (viewMode === 'category-final') {
+            const activeMetric = document.querySelector('.indicator-list .category-label.active');
+            if (activeMetric && activeMetric.dataset.metricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+              console.log('Re-rendering final view:', activeMetric.dataset.metricKey);
+              window.renderBeeswarmCategoryFinal(activeMetric.dataset.metricKey);
+            }
           } else if (viewMode === 'category-v7') {
             const activeMetric = document.querySelector('.indicator-list .category-label.active');
             if (activeMetric && activeMetric.dataset.metricKey && typeof window.renderBeeswarmCategoryMultiSelect === 'function') {
@@ -1291,6 +1857,229 @@
             }
           }
         }, 250); // Debounce resize events
+      });
+    }
+    
+      // Column Selection Dialog
+      function showColumnSelectionDialog() {
+        if (!window.appState.jsonData || window.appState.jsonData.length === 0) {
+          window.processData();
+          return;
+        }
+        
+        const columns = Object.keys(window.appState.jsonData[0]);
+        const dialog = document.getElementById('column-selection-dialog');
+        const listContainer = document.getElementById('column-selection-list');
+        const okBtn = document.getElementById('column-selection-ok');
+        const cancelBtn = document.getElementById('column-selection-cancel');
+        
+        // Clear previous list
+        listContainer.innerHTML = '';
+        
+        // Populate column list
+        let selectedColumn = null;
+        columns.forEach(column => {
+          const item = document.createElement('div');
+          item.className = 'column-list-item';
+          item.textContent = column;
+          item.dataset.column = column;
+          
+          // Single click to select
+          item.addEventListener('click', function() {
+            // Remove previous selection
+            listContainer.querySelectorAll('.column-list-item').forEach(i => i.classList.remove('selected'));
+            // Add selection to this item
+            this.classList.add('selected');
+            selectedColumn = this.dataset.column;
+            okBtn.disabled = false;
+          });
+          
+          // Double click to select and confirm
+          item.addEventListener('dblclick', function() {
+            selectedColumn = this.dataset.column;
+            confirmColumnSelection(selectedColumn);
+            dialog.style.display = 'none';
+          });
+          
+          listContainer.appendChild(item);
+        });
+        
+        // Disable OK button initially
+        okBtn.disabled = true;
+        
+        // OK button handler
+        okBtn.onclick = function() {
+          if (selectedColumn) {
+            confirmColumnSelection(selectedColumn);
+            dialog.style.display = 'none';
+          }
+        };
+        
+        // Cancel button handler
+        cancelBtn.onclick = function() {
+          dialog.style.display = 'none';
+          // Hide loading indicator
+          document.querySelector('.loading').style.display = 'none';
+        };
+        
+        // Show dialog
+        dialog.style.display = 'flex';
+      }
+      
+      function confirmColumnSelection(columnName) {
+        // Store the selected column in appState
+        window.appState.selectedDataColumn = columnName;
+        
+        // Process the data with the selected column
+        // Show column selection dialog for custom datasets
+        showColumnSelectionDialog();
+        
+        // Hide loading indicator
+        document.querySelector('.loading').style.display = 'none';
+      }
+
+      // Column Selection Dialog Functions
+      function showColumnSelectionDialog() {
+        if (!window.appState.jsonData || window.appState.jsonData.length === 0) {
+          window.processData();
+          return;
+        }
+        
+        const columns = Object.keys(window.appState.jsonData[0]);
+        const dialog = document.getElementById('column-selection-dialog');
+        const listContainer = document.getElementById('column-selection-list');
+        const okBtn = document.getElementById('column-selection-ok');
+        const cancelBtn = document.getElementById('column-selection-cancel');
+        
+        // Clear previous list
+        listContainer.innerHTML = '';
+        
+        // Populate column list
+        let selectedColumn = null;
+        columns.forEach(column => {
+          const item = document.createElement('div');
+          item.className = 'column-list-item';
+          item.textContent = column;
+          item.dataset.column = column;
+          
+          // Single click to select
+          item.addEventListener('click', function() {
+            // Remove previous selection
+            listContainer.querySelectorAll('.column-list-item').forEach(i => i.classList.remove('selected'));
+            // Add selection to this item
+            this.classList.add('selected');
+            selectedColumn = this.dataset.column;
+            okBtn.disabled = false;
+          });
+          
+          // Double click to select and confirm
+          item.addEventListener('dblclick', function() {
+            selectedColumn = this.dataset.column;
+            confirmColumnSelection(selectedColumn);
+            dialog.style.display = 'none';
+          });
+          
+          listContainer.appendChild(item);
+        });
+        
+        // Disable OK button initially
+        okBtn.disabled = true;
+        
+        // OK button handler
+        okBtn.onclick = function() {
+          if (selectedColumn) {
+            confirmColumnSelection(selectedColumn);
+            dialog.style.display = 'none';
+          }
+        };
+        
+        // Cancel button handler
+        cancelBtn.onclick = function() {
+          dialog.style.display = 'none';
+          // Hide loading indicator
+          document.querySelector('.loading').style.display = 'none';
+        };
+        
+        // Show dialog
+        dialog.style.display = 'flex';
+      }
+      
+      function confirmColumnSelection(columnName) {
+        // Store the selected column in appState
+        window.appState.selectedDataColumn = columnName;
+        
+        // Process the data with the selected column
+        window.processData();
+        
+        // Hide loading indicator
+        document.querySelector('.loading').style.display = 'none';
+      }
+
+      // Make map popup resizable
+    const mapPopup = document.getElementById('map-panel-popup');
+    const mapPopupClose = document.getElementById('map-popup-close');
+    
+    if (mapPopup) {
+      // Close button functionality
+      if (mapPopupClose) {
+        mapPopupClose.addEventListener('click', function() {
+          mapPopup.style.display = 'none';
+          window.appState.finalViewMapMode = false;
+          const mapCheckbox = document.getElementById('map-mode-checkbox');
+          if (mapCheckbox) mapCheckbox.checked = false;
+        });
+      }
+      
+      // Add resize handle
+      const resizeHandle = document.createElement('div');
+      resizeHandle.className = 'map-resize-handle';
+      mapPopup.appendChild(resizeHandle);
+      
+      // Resize functionality
+      let isResizing = false;
+      let startWidth = 0;
+      let startHeight = 0;
+      let startX = 0;
+      let startY = 0;
+      
+      resizeHandle.addEventListener('mousedown', function(e) {
+        isResizing = true;
+        startWidth = mapPopup.offsetWidth;
+        startHeight = mapPopup.offsetHeight;
+        startX = e.clientX;
+        startY = e.clientY;
+        e.preventDefault();
+      });
+      
+      document.addEventListener('mousemove', function(e) {
+        if (!isResizing) return;
+        e.preventDefault();
+        
+        const deltaX = startX - e.clientX;
+        const deltaY = e.clientY - startY;
+        
+        const newWidth = Math.max(250, startWidth + deltaX);
+        const newHeight = Math.max(200, startHeight + deltaY);
+        
+        mapPopup.style.width = newWidth + 'px';
+        mapPopup.style.height = newHeight + 'px';
+        
+        // Update SVG size
+        const svg = document.getElementById('map-svg');
+        if (svg) {
+          const headerHeight = 30;
+          const padding = 20;
+          svg.setAttribute('width', newWidth - padding);
+          svg.setAttribute('height', newHeight - headerHeight - padding);
+          // Re-render map with new size
+          if (typeof window.renderMapPanel === 'function') {
+            window.renderMapPanel();
+          }
+        }
+      });
+      
+      document.addEventListener('mouseup', function() {
+        isResizing = false;
       });
     }
   </script>

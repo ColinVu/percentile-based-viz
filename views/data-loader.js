@@ -5,7 +5,8 @@
 
 // Load dataset based on selection
 async function loadSelectedDataset() {
-  const selectedDataset = document.querySelector('input[name="dataset"]:checked').value;
+  const datasetSelect = document.getElementById('dataset-select');
+  const selectedDataset = datasetSelect ? datasetSelect.value : 'us-counties';
   
   // Show loading indicator
   document.querySelector('.loading').style.display = 'flex';
@@ -40,6 +41,8 @@ async function loadUSCountyData() {
     
     // Convert to JSON
     window.appState.jsonData = XLSX.utils.sheet_to_json(worksheet);
+    // Clear custom column selection for built-in dataset
+    window.appState.selectedDataColumn = null;
     processData();
   } catch (error) {
     console.error('Error loading US County data:', error);
@@ -62,6 +65,8 @@ async function loadCountryDevelopmentData() {
     
     // Convert to JSON
     window.appState.jsonData = XLSX.utils.sheet_to_json(worksheet);
+    // Clear custom column selection for built-in dataset
+    window.appState.selectedDataColumn = null;
     processData();
   } catch (error) {
     console.error('Error loading Country Development data:', error);
@@ -134,6 +139,8 @@ function loadFallbackCountyData() {
   if (window.location.protocol === 'file:') {
     showCorsInfo();
   }
+  // Clear custom column selection for built-in dataset
+  window.appState.selectedDataColumn = null;
   processData();
 }
 
@@ -206,6 +213,8 @@ function loadFallbackCountryData() {
   if (window.location.protocol === 'file:') {
     showCorsInfo();
   }
+  // Clear custom column selection for built-in dataset
+  window.appState.selectedDataColumn = null;
   processData();
 }
 
@@ -225,16 +234,51 @@ function showCorsInfo() {
 function processData() {
   // Detect schema: Country vs County/State
   const firstRow = window.appState.jsonData && window.appState.jsonData.length > 0 ? window.appState.jsonData[0] : null;
-  const hasCountry = firstRow && Object.prototype.hasOwnProperty.call(firstRow, 'Country');
-  const hasCountyState = firstRow && Object.prototype.hasOwnProperty.call(firstRow, 'County') && Object.prototype.hasOwnProperty.call(firstRow, 'State');
   
-  if (hasCountry) {
-    window.appState.geoMode = 'country';
-  } else if (hasCountyState) {
-    window.appState.geoMode = 'county';
+  // Initialize SimilarityIndex for finding similar records
+  if (window.appState.jsonData && window.appState.jsonData.length > 0 && window.SimilarityIndex) {
+    try {
+      // Detect nominal columns
+      const nominalCols = [];
+      if (firstRow) {
+        if (firstRow.Country) nominalCols.push('Country');
+        if (firstRow.County) nominalCols.push('County');
+        if (firstRow.State) nominalCols.push('State');
+      }
+      
+      // Initialize the similarity index
+      window.appState.similarityIndex = new window.SimilarityIndex(window.appState.jsonData, {
+        nominalCols: nominalCols,
+        scaling: 'robust'
+      });
+      console.log('SimilarityIndex initialized with', window.appState.jsonData.length, 'records');
+    } catch (error) {
+      console.error('Error initializing SimilarityIndex:', error);
+      window.appState.similarityIndex = null;
+    }
+  }
+  
+  // Check if we have a selected data column from the dialog
+  if (window.appState.selectedDataColumn) {
+    // Use the selected column
+    const dataColumn = window.appState.selectedDataColumn;
+    window.appState.geoMode = 'custom';
+    window.appState.dataColumn = dataColumn;
   } else {
-    alert('Unsupported data format. Expect a "Country" column or "County" and "State" columns.');
-    return;
+    // Auto-detect for built-in datasets
+    const hasCountry = firstRow && Object.prototype.hasOwnProperty.call(firstRow, 'Country');
+    const hasCountyState = firstRow && Object.prototype.hasOwnProperty.call(firstRow, 'County') && Object.prototype.hasOwnProperty.call(firstRow, 'State');
+    
+    if (hasCountry) {
+      window.appState.geoMode = 'country';
+      window.appState.dataColumn = 'Country';
+    } else if (hasCountyState) {
+      window.appState.geoMode = 'county';
+      window.appState.dataColumn = 'County';
+    } else {
+      alert('Unsupported data format. Expect a "Country" column or "County" and "State" columns.');
+      return;
+    }
   }
   
   // Populate dropdown
@@ -247,7 +291,7 @@ function processData() {
     countrySelect.innerHTML = '<option value="">Select a country...</option>';
     nameEl.textContent = 'Select a country';
     window.appState.entities = window.appState.jsonData.map(d => d.Country).filter(Boolean).sort();
-  } else {
+  } else if (window.appState.geoMode === 'county') {
     titleEl.textContent = 'US County Development Indicators - Percentile Scroll';
     countrySelect.innerHTML = '<option value="">Select a county...</option>';
     nameEl.textContent = 'Select a county';
@@ -256,6 +300,18 @@ function processData() {
     window.appState.entities = window.appState.jsonData
       .filter(d => d.County && d.State)
       .map(d => d.__displayName)
+      .sort((a, b) => a.localeCompare(b));
+  } else {
+    // Custom column mode
+    const dataColumn = window.appState.dataColumn;
+    titleEl.textContent = 'Percentile Scroll';
+    countrySelect.innerHTML = `<option value="">Select a ${dataColumn}...</option>`;
+    nameEl.textContent = `Select a ${dataColumn}`;
+    window.appState.entities = window.appState.jsonData
+      .map(d => d[dataColumn])
+      .filter(Boolean)
+      .map(v => String(v).trim())
+      .filter(v => v !== '')
       .sort((a, b) => a.localeCompare(b));
   }
   
@@ -300,6 +356,9 @@ function processData() {
     window.updateCountryInfo();
     if (window.updateMetricsDisplay) {
       window.updateMetricsDisplay(50);
+    }
+    if (window.populateAllInlineMetrics) {
+      window.populateAllInlineMetrics();
     }
   }
 

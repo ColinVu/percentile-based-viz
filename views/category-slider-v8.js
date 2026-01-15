@@ -142,13 +142,28 @@
     if (window.appState.viewMode === 'category-v8' && typeof window.renderCategoryMetricListV8 === 'function') {
       window.renderCategoryMetricListV8({ preserveSelection: true, prefilteredRows: rows });
     }
+    // Also handle Final View
+    if (window.appState.viewMode === 'category-final') {
+      if (typeof window.renderCategoryMetricListFinal === 'function') {
+        window.renderCategoryMetricListFinal();
+      }
+      if (window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
+        window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+      }
+    }
   }
 
   function renderFilterRow(filter) {
     const rowEl = document.createElement('div');
     rowEl.className = 'filter-row';
 
+    // First line: column select and remove button
+    const firstLine = document.createElement('div');
+    firstLine.className = 'filter-row-line';
+    firstLine.style.cssText = 'display: flex; align-items: center; gap: 6px; width: 100%;';
+
     const columnSelect = document.createElement('select');
+    columnSelect.style.flex = '1';
     const columns = getFilterableColumns();
     columns.forEach(col => {
       const option = document.createElement('option');
@@ -164,12 +179,27 @@
       filterSelectRenderControls();
       filterSelectHandleFiltersUpdated();
     });
-    rowEl.appendChild(columnSelect);
+    firstLine.appendChild(columnSelect);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'filter-remove-btn';
+    removeBtn.textContent = '−';
+    removeBtn.addEventListener('click', () => filterSelectRemoveFilter(filter.id));
+    firstLine.appendChild(removeBtn);
+
+    rowEl.appendChild(firstLine);
 
     ensureFilterDefaults(filter);
 
+    // Second line: value/record selector
+    const secondLine = document.createElement('div');
+    secondLine.className = 'filter-row-line';
+    secondLine.style.cssText = 'display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 6px;';
+
     if (filter.type === 'nominal') {
       const valueSelect = document.createElement('select');
+      valueSelect.style.flex = '1';
       const optionEmpty = document.createElement('option');
       optionEmpty.value = '';
       optionEmpty.textContent = 'Select value…';
@@ -186,9 +216,10 @@
         filter.value = valueSelect.value;
         filterSelectHandleFiltersUpdated();
       });
-      rowEl.appendChild(valueSelect);
+      secondLine.appendChild(valueSelect);
     } else if (filter.type === 'numeric') {
       const operatorSelect = document.createElement('select');
+      operatorSelect.style.width = '50px';
       [
         { value: 'gt', label: '>' },
         { value: 'lt', label: '<' }
@@ -203,11 +234,12 @@
         filter.operator = operatorSelect.value;
         filterSelectHandleFiltersUpdated();
       });
-      rowEl.appendChild(operatorSelect);
+      secondLine.appendChild(operatorSelect);
 
       const input = document.createElement('input');
       input.type = 'number';
       input.placeholder = 'Value';
+      input.style.flex = '1';
       if (filter.value !== undefined && filter.value !== null && filter.value !== '') {
         input.value = filter.value;
       }
@@ -215,21 +247,16 @@
         filter.value = input.value;
         filterSelectHandleFiltersUpdated();
       });
-      rowEl.appendChild(input);
+      secondLine.appendChild(input);
     } else {
       const note = document.createElement('span');
       note.textContent = 'Unsupported column type';
       note.style.fontSize = '12px';
       note.style.color = '#9ca3af';
-      rowEl.appendChild(note);
+      secondLine.appendChild(note);
     }
 
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'filter-remove-btn';
-    removeBtn.textContent = 'Remove';
-    removeBtn.addEventListener('click', () => filterSelectRemoveFilter(filter.id));
-    rowEl.appendChild(removeBtn);
+    rowEl.appendChild(secondLine);
 
     return rowEl;
   }

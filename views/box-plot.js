@@ -20,7 +20,14 @@ function renderBoxPlotCategory(metricKey) {
       const raw = d[metricKey];
       const v = typeof raw === 'number' ? raw : parseFloat(raw);
       if (raw === '..' || raw === undefined || raw === null || isNaN(v)) return null;
-      const label = window.appState.geoMode === 'country' ? d.Country : (d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`);
+      let label;
+      if (window.appState.geoMode === 'country') {
+        label = d.Country;
+      } else if (window.appState.geoMode === 'county') {
+        label = d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`;
+      } else {
+        label = d[window.appState.dataColumn];
+      }
       return { label, value: v };
     })
     .filter(Boolean);
@@ -116,12 +123,17 @@ function renderBoxPlotCategory(metricKey) {
     .attr('stroke-width', 1.5);
 
   // Highlight current selection position on the plot
-  const selectedRow = (window.appState.geoMode === 'country')
-    ? window.appState.jsonData.find(d => d.Country === window.appState.selectedCountry)
-    : window.appState.jsonData.find(d => {
-        const label = d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`;
-        return label === window.appState.selectedCountry;
-      });
+  let selectedRow;
+  if (window.appState.geoMode === 'country') {
+    selectedRow = window.appState.jsonData.find(d => d.Country === window.appState.selectedCountry);
+  } else if (window.appState.geoMode === 'county') {
+    selectedRow = window.appState.jsonData.find(d => {
+      const label = d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`;
+      return label === window.appState.selectedCountry;
+    });
+  } else {
+    selectedRow = window.appState.jsonData.find(d => d[window.appState.dataColumn] === window.appState.selectedCountry);
+  }
   if (selectedRow && selectedRow[metricKey] != null && selectedRow[metricKey] !== '..') {
     const val = typeof selectedRow[metricKey] === 'number' ? selectedRow[metricKey] : parseFloat(selectedRow[metricKey]);
     if (!isNaN(val)) {

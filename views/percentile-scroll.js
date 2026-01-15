@@ -22,6 +22,9 @@ function createPercentileSteps() {
             i === 100 ? 'Highest percentile' : 
             `${i}th percentile`}
         </div>
+        <div class="inline-metrics" data-percentile="${i}">
+          <!-- Metrics will be dynamically populated here -->
+        </div>
       </div>
     `;
     
@@ -62,8 +65,46 @@ function handleStepEnter(response) {
   // Get current percentile
   const percentile = parseInt(response.element.getAttribute('data-step'));
   
-  // Update metrics display
+  // Update inline metrics for this step
+  updateInlineMetrics(percentile);
+  
+  // Update metrics display in right panel
   updateMetricsDisplay(percentile);
+}
+
+// Update inline metrics within a percentile step
+function updateInlineMetrics(percentile) {
+  if (!window.appState.selectedCountry) return;
+  
+  const inlineContainer = document.querySelector(`.inline-metrics[data-percentile="${percentile}"]`);
+  if (!inlineContainer) return;
+  
+  // Find metrics at this percentile
+  const closestMetrics = findClosestMetricsSimplified(percentile);
+  
+  // Clear previous content
+  inlineContainer.innerHTML = '';
+  
+  if (closestMetrics.length === 0) {
+    inlineContainer.innerHTML = '<div class="no-inline-metrics">No metrics at this percentile</div>';
+    return;
+  }
+  
+  // Create metric chips for inline display
+  closestMetrics.forEach(item => {
+    const chip = document.createElement('div');
+    chip.className = 'inline-metric-chip';
+    
+    chip.innerHTML = `
+      <span class="inline-metric-name">${window.formatMetricName(item.metric)}</span>
+      <div class="inline-metric-tooltip">
+        <div class="tooltip-value">Value: ${window.formatValue(item.value, item.metric)}</div>
+        <div class="tooltip-percentile">Percentile: ${item.percentile}%</div>
+      </div>
+    `;
+    
+    inlineContainer.appendChild(chip);
+  });
 }
 
 // Find metrics closest to a given percentile
@@ -136,8 +177,49 @@ function updateMetricsDisplay(percentile) {
   });
 }
 
+// Populate all inline metrics for all percentile steps
+function populateAllInlineMetrics() {
+  if (!window.appState.selectedCountry) {
+    // Clear all inline metrics if no country selected
+    document.querySelectorAll('.inline-metrics').forEach(container => {
+      container.innerHTML = '';
+    });
+    return;
+  }
+  
+  // Update each percentile step
+  for (let i = 0; i <= 100; i += 5) {
+    const inlineContainer = document.querySelector(`.inline-metrics[data-percentile="${i}"]`);
+    if (!inlineContainer) continue;
+    
+    const closestMetrics = findClosestMetricsSimplified(i);
+    inlineContainer.innerHTML = '';
+    
+    if (closestMetrics.length === 0) {
+      inlineContainer.innerHTML = '<div class="no-inline-metrics">—</div>';
+      continue;
+    }
+    
+    closestMetrics.forEach(item => {
+      const chip = document.createElement('div');
+      chip.className = 'inline-metric-chip';
+      
+      chip.innerHTML = `
+        <span class="inline-metric-name">${window.formatMetricName(item.metric)}</span>
+        <div class="inline-metric-tooltip">
+          <div class="tooltip-value">${window.formatValue(item.value, item.metric)}</div>
+          <div class="tooltip-percentile">${item.percentile}%</div>
+        </div>
+      `;
+      
+      inlineContainer.appendChild(chip);
+    });
+  }
+}
+
 // Export functions
 window.createPercentileSteps = createPercentileSteps;
 window.initScrollama = initScrollama;
 window.updateMetricsDisplay = updateMetricsDisplay;
+window.populateAllInlineMetrics = populateAllInlineMetrics;
 

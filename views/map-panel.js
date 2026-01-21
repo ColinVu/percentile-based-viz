@@ -9,6 +9,10 @@ let worldCountriesData = null;
 let countryLookupData = null;
 let isLoadingMap = false;
 
+// Store zoom transforms to preserve zoom state across re-renders
+let currentZoomTransform = null;
+let currentMapType = null; // Track which map is currently displayed
+
 // Detect if dataset has FIPS code column
 function detectFIPSColumn() {
   if (!window.appState.jsonData || window.appState.jsonData.length === 0) return null;
@@ -392,6 +396,12 @@ async function renderLatLongMap(svgElement, width, height) {
     return;
   }
   
+  // Reset zoom if switching to a different map type
+  if (currentMapType !== 'latlong') {
+    currentZoomTransform = null;
+    currentMapType = 'latlong';
+  }
+  
   const svg = d3.select(svgElement);
   svg.selectAll('*').remove();
   
@@ -500,8 +510,10 @@ async function renderLatLongMap(svgElement, width, height) {
   });
   
   // Draw dots
-  g.append('g')
-    .attr('class', 'location-dots')
+  const dotsGroup = g.append('g')
+    .attr('class', 'location-dots');
+    
+  const circles = dotsGroup
     .selectAll('circle')
     .data(dots)
     .join('circle')
@@ -516,14 +528,16 @@ async function renderLatLongMap(svgElement, width, height) {
       handleLocationClick(d.label, evt);
     })
     .on('mouseenter', function() {
+      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
       d3.select(this)
-        .attr('r', 6)
-        .attr('stroke-width', 1.5);
+        .attr('r', 6 / currentScale)
+        .attr('stroke-width', 1.5 / currentScale);
     })
     .on('mouseleave', function() {
+      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
       d3.select(this)
-        .attr('r', 4)
-        .attr('stroke-width', 0.5);
+        .attr('r', 4 / currentScale)
+        .attr('stroke-width', 0.5 / currentScale);
     });
   
   // Add zoom behavior
@@ -531,9 +545,21 @@ async function renderLatLongMap(svgElement, width, height) {
     .scaleExtent([1, 8])
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
+      currentZoomTransform = event.transform;
+      
+      // Keep dots constant size by inversely scaling them
+      const scale = event.transform.k;
+      circles
+        .attr('r', 4 / scale)
+        .attr('stroke-width', 0.5 / scale);
     });
   
   svg.call(zoom);
+  
+  // Restore previous zoom state if it exists
+  if (currentZoomTransform) {
+    svg.call(zoom.transform, currentZoomTransform);
+  }
 }
 
 // Render world countries map (reuses same structure as US map)
@@ -548,6 +574,12 @@ async function renderWorldMap(svgElement, width, height) {
   if (!lookup || lookup.length === 0) {
     console.error('Country lookup not available');
     return;
+  }
+  
+  // Reset zoom if switching to a different map type
+  if (currentMapType !== 'world') {
+    currentZoomTransform = null;
+    currentMapType = 'world';
   }
   
   const svg = d3.select(svgElement);
@@ -638,7 +670,7 @@ async function renderWorldMap(svgElement, width, height) {
     }
   }
   
-  g.append('g')
+  const countryPaths = g.append('g')
     .attr('class', 'countries')
     .selectAll('path')
     .data(countries.features)
@@ -676,14 +708,16 @@ async function renderWorldMap(svgElement, width, height) {
       handleLocationClick(label, evt);
     })
     .on('mouseenter', function() {
+      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
       d3.select(this)
         .attr('stroke', '#334155')
-        .attr('stroke-width', 1.5);
+        .attr('stroke-width', 1.5 / currentScale);
     })
     .on('mouseleave', function() {
+      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
       d3.select(this)
         .attr('stroke', '#ffffff')
-        .attr('stroke-width', 0.5);
+        .attr('stroke-width', 0.5 / currentScale);
     });
   
   // Add zoom behavior
@@ -691,9 +725,19 @@ async function renderWorldMap(svgElement, width, height) {
     .scaleExtent([1, 8])
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
+      currentZoomTransform = event.transform;
+      
+      // Keep stroke width constant by inversely scaling it
+      const scale = event.transform.k;
+      countryPaths.attr('stroke-width', 0.5 / scale);
     });
   
   svg.call(zoom);
+  
+  // Restore previous zoom state if it exists
+  if (currentZoomTransform) {
+    svg.call(zoom.transform, currentZoomTransform);
+  }
 }
 
 // Render the US counties map
@@ -702,6 +746,12 @@ async function renderUSMap(svgElement, width, height) {
   if (!mapData) {
     console.error('Map data not available');
     return;
+  }
+  
+  // Reset zoom if switching to a different map type
+  if (currentMapType !== 'us') {
+    currentZoomTransform = null;
+    currentMapType = 'us';
   }
   
   const svg = d3.select(svgElement);
@@ -727,7 +777,7 @@ async function renderUSMap(svgElement, width, height) {
   const g = svg.append('g');
   
   // Render counties
-  g.append('g')
+  const countyPaths = g.append('g')
     .attr('class', 'counties')
     .selectAll('path')
     .data(counties.features)
@@ -767,18 +817,20 @@ async function renderUSMap(svgElement, width, height) {
       handleLocationClick(label, evt);
     })
     .on('mouseenter', function(evt, d) {
+      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
       d3.select(this)
         .attr('stroke', '#334155')
-        .attr('stroke-width', 1.5);
+        .attr('stroke-width', 1.5 / currentScale);
     })
     .on('mouseleave', function() {
+      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
       d3.select(this)
         .attr('stroke', '#ffffff')
-        .attr('stroke-width', 0.3);
+        .attr('stroke-width', 0.3 / currentScale);
     });
   
   // Render state borders on top
-  g.append('g')
+  const statePaths = g.append('g')
     .attr('class', 'states')
     .selectAll('path')
     .data(states.features)
@@ -795,9 +847,20 @@ async function renderUSMap(svgElement, width, height) {
     .scaleExtent([1, 8])
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
+      currentZoomTransform = event.transform;
+      
+      // Keep stroke widths constant by inversely scaling them
+      const scale = event.transform.k;
+      countyPaths.attr('stroke-width', 0.3 / scale);
+      statePaths.attr('stroke-width', 1 / scale);
     });
   
   svg.call(zoom);
+  
+  // Restore previous zoom state if it exists
+  if (currentZoomTransform) {
+    svg.call(zoom.transform, currentZoomTransform);
+  }
 }
 
 // Main render function for the map panel

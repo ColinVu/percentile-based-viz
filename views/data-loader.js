@@ -16,6 +16,8 @@ async function loadSelectedDataset() {
       await loadUSCountyData();
     } else if (selectedDataset === 'country-development') {
       await loadCountryDevelopmentData();
+    } else if (selectedDataset === 'colleges') {
+      await loadCollegesData();
     }
     // Custom dataset is handled by file input event
   } catch (error) {
@@ -72,6 +74,30 @@ async function loadCountryDevelopmentData() {
     console.error('Error loading Country Development data:', error);
     // Fallback to sample country data
     loadFallbackCountryData();
+  }
+}
+
+// Load Colleges dataset
+async function loadCollegesData() {
+  try {
+    const response = await fetch('colleges.xlsx');
+    const arrayBuffer = await response.arrayBuffer();
+    const data = new Uint8Array(arrayBuffer);
+    const workbook = XLSX.read(data, { type: 'array' });
+    
+    // Get the first sheet
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    
+    // Convert to JSON
+    window.appState.jsonData = XLSX.utils.sheet_to_json(worksheet);
+    // Clear custom column selection for built-in dataset
+    window.appState.selectedDataColumn = null;
+    processData();
+  } catch (error) {
+    console.error('Error loading Colleges data:', error);
+    // Fallback to sample colleges data
+    loadFallbackCollegesData();
   }
 }
 
@@ -209,6 +235,75 @@ function loadFallbackCountryData() {
     }
   ];
   console.log('Using fallback Country Development data due to CORS restrictions');
+  // Only show CORS info if running locally (file:// protocol)
+  if (window.location.protocol === 'file:') {
+    showCorsInfo();
+  }
+  // Clear custom column selection for built-in dataset
+  window.appState.selectedDataColumn = null;
+  processData();
+}
+
+// Fallback sample data for Colleges (when file can't be loaded)
+function loadFallbackCollegesData() {
+  window.appState.jsonData = [
+    {
+      "Name": "Harvard University",
+      "State": "Massachusetts",
+      "Type": "Private",
+      "Enrollment": 22947,
+      "AcceptanceRate": 4.5,
+      "MedianSAT": 1520,
+      "AverageCost": 75891,
+      "GraduationRate": 98,
+      "MedianEarnings": 89700
+    },
+    {
+      "Name": "Stanford University",
+      "State": "California",
+      "Type": "Private",
+      "Enrollment": 17249,
+      "AcceptanceRate": 4.3,
+      "MedianSAT": 1505,
+      "AverageCost": 77034,
+      "GraduationRate": 95,
+      "MedianEarnings": 94000
+    },
+    {
+      "Name": "MIT",
+      "State": "Massachusetts",
+      "Type": "Private",
+      "Enrollment": 11520,
+      "AcceptanceRate": 6.7,
+      "MedianSAT": 1535,
+      "AverageCost": 77020,
+      "GraduationRate": 94,
+      "MedianEarnings": 104700
+    },
+    {
+      "Name": "University of California Berkeley",
+      "State": "California",
+      "Type": "Public",
+      "Enrollment": 43204,
+      "AcceptanceRate": 16.3,
+      "MedianSAT": 1430,
+      "AverageCost": 43176,
+      "GraduationRate": 92,
+      "MedianEarnings": 76200
+    },
+    {
+      "Name": "University of Texas Austin",
+      "State": "Texas",
+      "Type": "Public",
+      "Enrollment": 52384,
+      "AcceptanceRate": 31.8,
+      "MedianSAT": 1355,
+      "AverageCost": 38326,
+      "GraduationRate": 87,
+      "MedianEarnings": 65000
+    }
+  ];
+  console.log('Using fallback Colleges data due to CORS restrictions');
   // Only show CORS info if running locally (file:// protocol)
   if (window.location.protocol === 'file:') {
     showCorsInfo();

@@ -287,12 +287,12 @@ function processData() {
   const nameEl = document.getElementById('country-name');
   
   if (window.appState.geoMode === 'country') {
-    titleEl.textContent = 'Percentile Scroll';
+    // titleEl.textContent = 'Percentile Scroll'; // App title is hard-coded as "Factxis"
     countrySelect.innerHTML = '<option value="">Select a country...</option>';
     nameEl.textContent = 'Select a country';
     window.appState.entities = window.appState.jsonData.map(d => d.Country).filter(Boolean).sort();
   } else if (window.appState.geoMode === 'county') {
-    titleEl.textContent = 'US County Development Indicators - Percentile Scroll';
+    // titleEl.textContent = 'US County Development Indicators - Percentile Scroll'; // App title is hard-coded as "Factxis"
     countrySelect.innerHTML = '<option value="">Select a county...</option>';
     nameEl.textContent = 'Select a county';
     // Create a display label and keep original columns for filtering
@@ -304,7 +304,7 @@ function processData() {
   } else {
     // Custom column mode
     const dataColumn = window.appState.dataColumn;
-    titleEl.textContent = 'Percentile Scroll';
+    // titleEl.textContent = 'Percentile Scroll'; // App title is hard-coded as "Factxis"
     countrySelect.innerHTML = `<option value="">Select a ${dataColumn}...</option>`;
     nameEl.textContent = `Select a ${dataColumn}`;
     window.appState.entities = window.appState.jsonData
@@ -380,6 +380,32 @@ function processData() {
     window.renderCategoryMetricListV8();
     if (window.appState.categorySelectedMetricKey) {
       window.renderBeeswarmCategoryFilter(window.appState.categorySelectedMetricKey);
+    }
+  }
+  
+  console.log('[DATA-LOADER] Checking category-final mode:', {
+    viewMode: window.appState.viewMode,
+    isCategoryFinal: window.appState.viewMode === 'category-final',
+    renderFunctionExists: typeof window.renderCategoryMetricListFinal === 'function',
+    selectedMetricKey: window.appState.categorySelectedMetricKey
+  });
+  
+  if (window.appState.viewMode === 'category-final' && typeof window.renderCategoryMetricListFinal === 'function') {
+    console.log('[DATA-LOADER] Rendering category-final metric list...');
+    window.renderCategoryMetricListFinal();
+    if (window.appState.categorySelectedMetricKey) {
+      console.log('[DATA-LOADER] Rendering beeswarm for metric:', window.appState.categorySelectedMetricKey);
+      window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+    } else {
+      console.log('[DATA-LOADER] No metric key selected, checking for first metric button...');
+      setTimeout(() => {
+        const firstMetricBtn = document.querySelector('.indicator-list .category-label');
+        console.log('[DATA-LOADER] First metric button found:', firstMetricBtn);
+        if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
+          console.log('[DATA-LOADER] Clicking first metric:', firstMetricBtn.dataset.metricKey);
+          firstMetricBtn.click();
+        }
+      }, 100);
     }
   }
 }

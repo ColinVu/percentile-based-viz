@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Faxis</title>
+  <title>Factxis</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
@@ -40,20 +40,19 @@
   <!-- Collapsible Sidebar -->
   <div class="sidebar open" id="sidebar">
     <div class="sidebar-header">
-      <h2>Controls</h2>
     </div>
     
     <div class="sidebar-content">
-      <div class="control-section">
+      <div class="control-section" style="display: none;">
         <h3>View Mode</h3>
         <select class="toggle-view-select" id="toggle-view">
-          <option value="percentile" selected>Percentile Scroll</option>
+          <option value="percentile">Percentile Scroll</option>
           <option value="identifier">Horizontal View</option>
           <option value="category">Category Slider (Distributed)</option>
           <option value="category-v2">Category Slider (Color ramp)</option>
           <option value="category-v3">Category Slider (Country Detailed)</option>
           <option value="category-v6">Category Slider (Encoded Data)</option>
-          <option value="category-final">Faxis</option>
+          <option value="category-final" selected>Factxis</option>
           <option value="category-v7">Category Slider (Multi-Select)</option>
           <option value="category-v8">Filter Select</option>
           <option value="category-v4">Category Slider (County Detailed)</option>
@@ -64,7 +63,7 @@
 
       <div class="control-section" id="filter-select-section" style="display: none;">
         <h3 class="collapsible-header" id="filter-section-header">
-          <span>Filters</span>
+          <span>Filter Data</span>
           <span class="collapse-arrow">&#9660;</span>
         </h3>
         <div class="collapsible-content" id="filter-section-content">
@@ -75,15 +74,15 @@
       </div>
 
       <div class="control-section" id="encoding-mode-section" style="display: none;">
-        <h3>Encoding Mode</h3>
+        <h3>Data Encoding</h3>
         <div class="encoding-mode-options">
           <label class="encoding-mode-option">
             <input type="radio" name="encodingMode" value="selection" checked>
-            <span>Encode by Selection</span>
+            <span>Color by Selection</span>
           </label>
           <label class="encoding-mode-option">
             <input type="radio" name="encodingMode" value="feature">
-            <span>Encode by Feature</span>
+            <span>Color by Feature</span>
           </label>
         </div>
       </div>
@@ -157,6 +156,14 @@
   <!-- Main Header -->
   <div class="header">
     <div class="header-left">
+      <div class="header-title">
+        <h1 id="app-title">Factxis</h1>
+        <h2>Visualizing Datasets by Percentiles</h2>
+      </div>
+    </div>
+    <div class="header-center">
+    </div>
+    <div class="header-right">
       <label for="dataset-select" class="header-dataset-label">Dataset</label>
       <div class="header-dataset">
         <select id="dataset-select">
@@ -171,10 +178,6 @@
         </div>
       </div>
     </div>
-    <div class="header-center">
-      <h1 id="app-title">Percentile Scroll</h1>
-    </div>
-    <div class="header-right"></div>
   </div>
   
   <div class="percentile-scroll-container" id="percentile-scroll-container">
@@ -267,27 +270,65 @@
   <script>
     // Initialize the application
     document.addEventListener('DOMContentLoaded', function() {
+      console.log('[INIT] DOMContentLoaded fired');
+      
       // Set initial sidebar state (starts open)
       document.body.classList.add('sidebar-open');
       
-      // Set initial view mode state (default is percentile, so show location section)
+      // Set initial view mode state (default is category-final / Faxis mode)
+      // OLD CODE (for percentile mode - commented out since we default to Faxis now):
+      /*
       const locationSection = document.getElementById('location-section');
       const stateSection = document.getElementById('state-section');
       const countySection = document.getElementById('county-section');
       locationSection.style.display = 'block';
       stateSection.style.display = 'none';
       countySection.style.display = 'none';
-      
-      // Create percentile steps
       window.createPercentileSteps();
+      window.initScrollama();
+      */
+      
+      console.log('[INIT] Current viewMode:', window.appState.viewMode);
       
       // Setup event listeners
       setupEventListeners();
       
-      // Initialize scrollama
-      window.initScrollama();
+      // Initialize for category-final mode (Faxis)
+      const pctContainer = document.getElementById('percentile-scroll-container');
+      const idContainer = document.getElementById('country-identifier-container');
+      console.log('[INIT] Containers found:', { pctContainer: !!pctContainer, idContainer: !!idContainer });
+      
+      if (pctContainer) pctContainer.classList.add('hidden');
+      if (idContainer) idContainer.classList.remove('hidden');
+      
+      // App title is hard-coded as "Factxis" in HTML
+      console.log('[INIT] App title is hard-coded as Factxis');
+      
+      // Show encoding mode section for category-final
+      const encodingModeSection = document.getElementById('encoding-mode-section');
+      console.log('[INIT] Encoding mode section found:', !!encodingModeSection);
+      
+      if (encodingModeSection) {
+        encodingModeSection.style.display = 'block';
+        // Initialize encoding mode
+        const currentMode = window.appState.encodingMode || 'selection';
+        console.log('[INIT] Setting encoding mode to:', currentMode);
+        const checkedRadio = document.querySelector(`input[name="encodingMode"][value="${currentMode}"]`);
+        if (checkedRadio) checkedRadio.checked = true;
+        if (typeof updateEncodingMode === 'function') {
+          updateEncodingMode(currentMode);
+        }
+      }
+      
+      // Show filter select section for category-final (needs to be done after setupEventListeners)
+      const filterSelectSection = document.getElementById('filter-select-section');
+      if (filterSelectSection) {
+        console.log('[INIT] Showing filter-select section');
+        filterSelectSection.style.display = 'block';
+      }
       
       // Load the default dataset (US Counties)
+      console.log('[INIT] Loading default dataset...');
       window.loadSelectedDataset();
     });
     
@@ -695,9 +736,19 @@
       
       function refreshEncodedColorDropdown() {
         if (!encodedSelect) return;
-        const columns = Array.isArray(window.appState.nominalColumns) && window.appState.nominalColumns.length > 0
+        
+        // Get both nominal (categorical) and numeric columns
+        const nominalCols = Array.isArray(window.appState.nominalColumns) && window.appState.nominalColumns.length > 0
           ? window.appState.nominalColumns
           : (typeof window.getNominalColumns === 'function' ? window.getNominalColumns() : []);
+        
+        const numericCols = typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [];
+        
+        // Filter out FIPS codes from numeric columns
+        const filteredNumericCols = numericCols.filter(m => {
+          const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+          return norm !== 'fipscode';
+        });
         
         encodedSelect.innerHTML = '';
         
@@ -707,23 +758,44 @@
         noneOption.textContent = 'None';
         encodedSelect.appendChild(noneOption);
         
-        if (!columns || columns.length === 0) {
+        const hasColumns = (nominalCols && nominalCols.length > 0) || (filteredNumericCols && filteredNumericCols.length > 0);
+        
+        if (!hasColumns) {
           encodedSelect.disabled = false;
           return;
         }
         
         encodedSelect.disabled = false;
-        const fragment = document.createDocumentFragment();
-        columns.forEach(col => {
-          const option = document.createElement('option');
-          option.value = col;
-          option.textContent = window.formatMetricName ? window.formatMetricName(col) : col;
-          fragment.appendChild(option);
-        });
-        encodedSelect.appendChild(fragment);
+        
+        // Add categorical columns with optgroup
+        if (nominalCols && nominalCols.length > 0) {
+          const categoricalGroup = document.createElement('optgroup');
+          categoricalGroup.label = 'Categorical';
+          nominalCols.forEach(col => {
+            const option = document.createElement('option');
+            option.value = col;
+            option.textContent = window.formatMetricName ? window.formatMetricName(col) : col;
+            categoricalGroup.appendChild(option);
+          });
+          encodedSelect.appendChild(categoricalGroup);
+        }
+        
+        // Add numeric columns with optgroup
+        if (filteredNumericCols && filteredNumericCols.length > 0) {
+          const numericGroup = document.createElement('optgroup');
+          numericGroup.label = 'Numeric (5 bins)';
+          filteredNumericCols.forEach(col => {
+            const option = document.createElement('option');
+            option.value = col;
+            option.textContent = window.formatMetricName ? window.formatMetricName(col) : col;
+            numericGroup.appendChild(option);
+          });
+          encodedSelect.appendChild(numericGroup);
+        }
         
         // Set to current value or default to empty (None)
-        const targetValue = (window.appState.categoryEncodedField && columns.includes(window.appState.categoryEncodedField))
+        const allColumns = [...(nominalCols || []), ...(filteredNumericCols || [])];
+        const targetValue = (window.appState.categoryEncodedField && allColumns.includes(window.appState.categoryEncodedField))
           ? window.appState.categoryEncodedField
           : '';
         encodedSelect.value = targetValue;
@@ -1655,7 +1727,7 @@
           if (this.value === 'identifier') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Horizontal View';
+            // document.getElementById('app-title').textContent = 'Horizontal View'; // App title is hard-coded
             window.renderIdentifierMetricList();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -1665,7 +1737,7 @@
           } else if (this.value === 'category') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider (Distributed)';
+            // document.getElementById('app-title').textContent = 'Category Slider (Distributed)'; // App title is hard-coded
             window.renderCategoryMetricList();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -1675,7 +1747,7 @@
           } else if (this.value === 'category-v2') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider (Color ramp)';
+            // document.getElementById('app-title').textContent = 'Category Slider (Color ramp)'; // App title is hard-coded
             window.renderCategoryMetricListV2();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -1685,7 +1757,7 @@
           } else if (this.value === 'category-v3') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider (Country Detailed)';
+            // document.getElementById('app-title').textContent = 'Category Slider (Country Detailed)'; // App title is hard-coded
             window.renderCategoryMetricListV3();
             const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -1695,7 +1767,7 @@
           } else if (this.value === 'category-v6') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider (Encoded Data)';
+            // document.getElementById('app-title').textContent = 'Category Slider (Encoded Data)'; // App title is hard-coded
             if (typeof window.renderCategoryMetricListV6 === 'function') {
               window.renderCategoryMetricListV6();
             }
@@ -1707,7 +1779,7 @@
           } else if (this.value === 'category-final') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Faxis';
+            // document.getElementById('app-title').textContent = 'Factxis'; // App title is hard-coded
             if (typeof window.renderCategoryMetricListFinal === 'function') {
               window.renderCategoryMetricListFinal();
             }
@@ -1719,7 +1791,7 @@
           } else if (this.value === 'category-v7') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider (Multi-Select)';
+            // document.getElementById('app-title').textContent = 'Category Slider (Multi-Select)'; // App title is hard-coded
             if (typeof window.multiSelectEnsureState === 'function') {
               window.multiSelectEnsureState();
             }
@@ -1734,7 +1806,7 @@
           } else if (this.value === 'category-v8') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Filter Select';
+            // document.getElementById('app-title').textContent = 'Filter Select'; // App title is hard-coded
             if (typeof window.filterSelectEnsureState === 'function') {
               window.filterSelectEnsureState();
             }
@@ -1752,7 +1824,7 @@
           } else if (this.value === 'category-v4') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider (County Detailed)';
+            // document.getElementById('app-title').textContent = 'Category Slider (County Detailed)'; // App title is hard-coded
             window.renderCategoryMetricListV4();
             const firstMetricBtn = document.querySelector('.indicator-list .category-label');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -1762,7 +1834,7 @@
           } else if (this.value === 'category-v5') {
             pctContainer.classList.add('hidden');
             idContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Category Slider (Comparison)';
+            // document.getElementById('app-title').textContent = 'Category Slider (Comparison)'; // App title is hard-coded
             window.renderCategoryMetricListV5();
             const firstMetricBtn = document.querySelector('.indicator-list .category-label');
             if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -1772,7 +1844,7 @@
         } else if (this.value === 'box') {
           pctContainer.classList.add('hidden');
           idContainer.classList.remove('hidden');
-          document.getElementById('app-title').textContent = 'Box and Whisker View';
+          // document.getElementById('app-title').textContent = 'Box and Whisker View'; // App title is hard-coded
           window.renderCategoryMetricListBox();
           const firstMetricBtn = document.querySelector('.indicator-list .indicator-item');
           if (firstMetricBtn && firstMetricBtn.dataset && firstMetricBtn.dataset.metricKey) {
@@ -1782,7 +1854,7 @@
           } else {
             idContainer.classList.add('hidden');
             pctContainer.classList.remove('hidden');
-            document.getElementById('app-title').textContent = 'Percentile Scroll';
+            // document.getElementById('app-title').textContent = 'Percentile Scroll'; // App title is hard-coded
             if (window.appState.scroller && typeof window.appState.scroller.resize === 'function') {
               window.appState.scroller.resize();
             }

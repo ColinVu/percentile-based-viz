@@ -6,7 +6,11 @@
 function renderCategoryMetricListFinal() {
   const listEl = document.getElementById('indicator-list');
   if (!listEl) return;
-  const metrics = window.getNumericMetrics();
+  // Exclude FIPS code metrics (handle variants: "FIPS_Code", "F I P S Code", "FIPS Code", etc.)
+  const metrics = window.getNumericMetrics().filter(m => {
+    const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+    return norm !== 'fipscode';
+  });
   listEl.innerHTML = '';
 
   if (window.appState.selectedCountry) {
@@ -28,8 +32,12 @@ function renderCategoryMetricListFinal() {
   
   const labelsCol = document.createElement('div');
   labelsCol.className = 'category-labels';
+  labelsCol.style.paddingTop = '28px'; // Make space for the fixed header (reduced for compact display)
+  
   const railCol = document.createElement('div');
   railCol.className = 'category-rail';
+  railCol.style.paddingTop = '28px'; // Match the padding of labelsCol
+  
   const track = document.createElement('div');
   track.className = 'category-rail-track';
   const handle = document.createElement('div');
@@ -54,6 +62,20 @@ function renderCategoryMetricListFinal() {
   
   checkboxContainer.appendChild(checkbox);
   checkboxContainer.appendChild(checkboxLabel);
+
+  // Add header row (fixed position at top)
+  const headerRow = document.createElement('div');
+  headerRow.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; padding: 6px 8px; font-weight: bold; font-size: 10px; color: #475569; border-bottom: 1px solid #e2e8f0; background: #f8fafc; z-index: 10;';
+  
+  const metricHeader = document.createElement('span');
+  metricHeader.textContent = 'Metric';
+  
+  const percentileHeader = document.createElement('span');
+  percentileHeader.textContent = 'Percentile/100%';
+  
+  headerRow.appendChild(metricHeader);
+  headerRow.appendChild(percentileHeader);
+  wrapper.appendChild(headerRow); // Add to wrapper instead of labelsCol
 
   decorated.forEach(({ key, pct }) => {
     const item = document.createElement('div');
@@ -80,13 +102,14 @@ function renderCategoryMetricListFinal() {
 
   // Function to apply evenly-spaced positioning (like V6/encoded)
   function applyEvenSpacing(labelNodes, containerHeight) {
+    const headerOffset = 28; // Offset for header
     const labelCount = labelNodes.length;
     const totalPadding = 20;
     const availableHeight = containerHeight - totalPadding;
     const spacing = labelCount > 1 ? availableHeight / (labelCount - 1) : 0;
 
     labelNodes.forEach((node, index) => {
-      const position = totalPadding / 2 + (index * spacing);
+      const position = totalPadding / 2 + (index * spacing) + headerOffset;
       node.style.top = position + 'px';
     });
 
@@ -100,8 +123,9 @@ function renderCategoryMetricListFinal() {
 
   // Function to apply distributed/percentile-based positioning (like original category-slider.js)
   function applyDistributedSpacing(labelNodes, containerHeight) {
-    const minLabelHeight = 9;
-    const labelPadding = 2;
+    const headerOffset = 28; // Offset for header
+    const minLabelHeight = 7; // Reduced for more compact display
+    const labelPadding = 1.5;
     const minSpacing = minLabelHeight + labelPadding;
 
     const labelData = labelNodes.map(node => {
@@ -154,7 +178,7 @@ function renderCategoryMetricListFinal() {
     }
 
     labelData.forEach(data => {
-      data.node.style.top = data.actualPosition + 'px';
+      data.node.style.top = (data.actualPosition + headerOffset) + 'px';
     });
 
     // Remove gradient for distributed mode
@@ -162,10 +186,12 @@ function renderCategoryMetricListFinal() {
   }
 
   requestAnimationFrame(() => {
-    track.style.height = labelsCol.clientHeight + 'px';
+    // Account for header padding when setting track height
+    const headerPadding = 28;
+    track.style.height = (labelsCol.clientHeight - headerPadding) + 'px';
 
     const labelNodes = Array.from(labelsCol.querySelectorAll('.category-label'));
-    const containerHeight = labelsCol.clientHeight;
+    const containerHeight = labelsCol.clientHeight - headerPadding;
 
     const computeSnapPoints = () => {
       window.appState.categorySnapPoints = labelNodes.map(node => parseFloat(node.style.top) || 0);
@@ -189,7 +215,9 @@ function renderCategoryMetricListFinal() {
         const labels = Array.from(listEl.querySelectorAll('.category-label'));
         const idx = labels.indexOf(active);
         if (idx >= 0 && window.appState.categorySnapPoints[idx] != null) {
-          handle.style.top = window.appState.categorySnapPoints[idx] + 'px';
+          // Subtract header offset since handle is positioned relative to track
+          const headerOffset = 28;
+          handle.style.top = (window.appState.categorySnapPoints[idx] - headerOffset) + 'px';
         }
       }
     };
@@ -218,11 +246,13 @@ function renderCategoryMetricListFinal() {
 
     // Drag interactions
     let dragging = false;
+    const headerOffset = 28;
     const onPointerMove = (evt) => {
       evt.preventDefault();
       if (!dragging) return;
       const trackRect = track.getBoundingClientRect();
-      const y = evt.clientY - trackRect.top;
+      // Add header offset to mouse position to match snap point coordinate system
+      const y = evt.clientY - trackRect.top + headerOffset;
       let nearestIdx = 0;
       let minDist = Infinity;
       window.appState.categorySnapPoints.forEach((p, i) => {
@@ -247,7 +277,8 @@ function renderCategoryMetricListFinal() {
     });
     track.addEventListener('pointerdown', (evt) => {
       const trackRect = track.getBoundingClientRect();
-      const y = evt.clientY - trackRect.top;
+      // Add header offset to mouse position to match snap point coordinate system
+      const y = evt.clientY - trackRect.top + headerOffset;
       let nearestIdx = 0;
       let minDist = Infinity;
       window.appState.categorySnapPoints.forEach((p, i) => {
@@ -261,14 +292,15 @@ function renderCategoryMetricListFinal() {
     });
 
     const updatePositionsAndSnapPoints = () => {
-      const newContainerHeight = labelsCol.clientHeight;
+      const headerPadding = 28;
+      const newContainerHeight = labelsCol.clientHeight - headerPadding;
       track.style.height = newContainerHeight + 'px';
       const useDistributed = checkbox.checked;
 
       if (useDistributed) {
         // Distributed mode with advanced buffering
-        const minLabelHeight = 6;
-        const labelPadding = 2;
+        const minLabelHeight = 5; // Reduced for more compact display
+        const labelPadding = 1.5;
         const minSpacing = minLabelHeight + labelPadding;
 
         const labelData = labelNodes.map(node => {
@@ -330,7 +362,7 @@ function renderCategoryMetricListFinal() {
         }
 
         labelData.forEach(data => {
-          data.node.style.top = data.actualPosition + 'px';
+          data.node.style.top = (data.actualPosition + headerPadding) + 'px';
         });
 
         track.style.background = '#cbd5e1';
@@ -342,7 +374,7 @@ function renderCategoryMetricListFinal() {
         const spacing = labelCount > 1 ? availableHeight / (labelCount - 1) : 0;
 
         labelNodes.forEach((node, index) => {
-          const position = totalPadding / 2 + (index * spacing);
+          const position = totalPadding / 2 + (index * spacing) + headerPadding;
           node.style.top = position + 'px';
         });
 
@@ -361,7 +393,9 @@ function renderCategoryMetricListFinal() {
         const labels = Array.from(listEl.querySelectorAll('.category-label'));
         const idx = labels.indexOf(active);
         if (idx >= 0 && window.appState.categorySnapPoints[idx] != null) {
-          handle.style.top = window.appState.categorySnapPoints[idx] + 'px';
+          // Subtract header offset since handle is positioned relative to track
+          const headerOffset = 28;
+          handle.style.top = (window.appState.categorySnapPoints[idx] - headerOffset) + 'px';
         }
       }
     };
@@ -382,7 +416,9 @@ function renderCategoryMetricListFinal() {
     if (window.appState.categorySnapPoints && window.appState.categorySnapPoints[index] != null) {
       const handle = listEl.querySelector('.category-handle');
       if (handle) {
-        handle.style.top = window.appState.categorySnapPoints[index] + 'px';
+        // Subtract header offset since handle is positioned relative to track
+        const headerOffset = 28;
+        handle.style.top = (window.appState.categorySnapPoints[index] - headerOffset) + 'px';
       }
     }
     if (render && typeof window.renderBeeswarmCategoryFinal === 'function') {

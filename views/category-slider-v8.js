@@ -317,7 +317,12 @@
       return;
     }
 
-    const metrics = typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [];
+    // Exclude FIPS code metrics (handle variants: "FIPS_Code", "F I P S Code", "FIPS Code", etc.)
+    const allMetrics = typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [];
+    const metrics = allMetrics.filter(m => {
+      const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+      return norm !== 'fipscode';
+    });
     if (!metrics || metrics.length === 0) {
       const message = document.createElement('div');
       message.className = 'no-metrics';

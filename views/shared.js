@@ -13,7 +13,7 @@ window.appState = {
   dataColumn: null, // The column to use as the main identifier (e.g., 'Country', 'County', or custom)
   selectedDataColumn: null, // The column selected by the user for custom datasets
   scroller: null,
-  viewMode: 'percentile', // 'percentile' | 'identifier' | 'category' | 'category-v2' | 'category-v3' | 'box'
+  viewMode: 'category-final', // Default to Faxis mode. Old modes: 'percentile' | 'identifier' | 'category' | 'category-v2' | 'category-v3' | 'box' | 'category-v8'
   categorySelectedMetricKey: null,
   categorySnapPoints: [],
   previousBeeswarmNodes: [], // Store previous node positions for smooth transitions

@@ -672,6 +672,10 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   const encodingLabel = encodingField ? window.formatMetricName(encodingField) : 'Group';
   const fallbackCategory = hasEncodingField ? 'Not specified' : 'All items';
   
+  // Check if encoding field is numeric
+  const numericCols = typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [];
+  const isNumericEncoding = hasEncodingField && numericCols.includes(encodingField);
+  
   // Check for text encoding field
   const textEncodingField = window.appState.categoryTextEncodedField;
   const hasTextEncoding = textEncodingField && textEncodingField !== '' && window.appState.jsonData.length > 0 && Object.prototype.hasOwnProperty.call(window.appState.jsonData[0], textEncodingField);
@@ -680,6 +684,43 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   const dataToUse = Array.isArray(window.appState.filterSelectFilteredRows) && window.appState.filterSelectFilteredRows.length > 0
     ? window.appState.filterSelectFilteredRows
     : window.appState.jsonData;
+
+  // Compute quantile bins for numeric encoding (5 bins) - must be after dataToUse is defined
+  let quantileBins = null;
+  if (isNumericEncoding) {
+    const encodingValues = dataToUse
+      .map(d => d[encodingField])
+      .filter(v => v !== undefined && v !== null && v !== '..' && !Number.isNaN(parseFloat(v)))
+      .map(v => parseFloat(v))
+      .sort((a, b) => a - b);
+    
+    if (encodingValues.length > 0) {
+      // Compute quintile thresholds (20th, 40th, 60th, 80th percentiles)
+      const q20 = d3.quantile(encodingValues, 0.2);
+      const q40 = d3.quantile(encodingValues, 0.4);
+      const q60 = d3.quantile(encodingValues, 0.6);
+      const q80 = d3.quantile(encodingValues, 0.8);
+      
+      quantileBins = {
+        thresholds: [q20, q40, q60, q80],
+        labels: ['Lowest 20%', 'Low 20-40%', 'Middle 40-60%', 'High 60-80%', 'Highest 20%']
+      };
+    }
+  }
+  
+  // Function to get bin for a numeric value
+  function getQuantileBin(value) {
+    if (!quantileBins || value === undefined || value === null || value === '..' || Number.isNaN(parseFloat(value))) {
+      return fallbackCategory;
+    }
+    const numVal = parseFloat(value);
+    const thresholds = quantileBins.thresholds;
+    if (numVal < thresholds[0]) return quantileBins.labels[0];
+    if (numVal < thresholds[1]) return quantileBins.labels[1];
+    if (numVal < thresholds[2]) return quantileBins.labels[2];
+    if (numVal < thresholds[3]) return quantileBins.labels[3];
+    return quantileBins.labels[4];
+  }
 
   const values = dataToUse
     .map(d => {
@@ -699,11 +740,17 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       const rawCategory = hasEncodingField ? d[encodingField] : null;
       let categoryValue = fallbackCategory;
       if (hasEncodingField) {
-        if (rawCategory === undefined || rawCategory === null || rawCategory === '..') {
-          categoryValue = fallbackCategory;
+        if (isNumericEncoding) {
+          // For numeric encoding, use quantile bins
+          categoryValue = getQuantileBin(rawCategory);
         } else {
-          const catStr = String(rawCategory).trim();
-          categoryValue = catStr === '' ? fallbackCategory : catStr;
+          // For categorical encoding, use the value as-is
+          if (rawCategory === undefined || rawCategory === null || rawCategory === '..') {
+            categoryValue = fallbackCategory;
+          } else {
+            const catStr = String(rawCategory).trim();
+            categoryValue = catStr === '' ? fallbackCategory : catStr;
+          }
         }
       }
       
@@ -752,13 +799,37 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   if (categories.length === 0) {
     categories.push(fallbackCategory);
   }
+  
+  // Sort categories to put "Not specified" last
+  categories.sort((a, b) => {
+    const aIsNotSpecified = a === 'Not specified' || a === fallbackCategory;
+    const bIsNotSpecified = b === 'Not specified' || b === fallbackCategory;
+    
+    if (aIsNotSpecified && !bIsNotSpecified) return 1; // a comes after b
+    if (!aIsNotSpecified && bIsNotSpecified) return -1; // a comes before b
+    
+    // For numeric bins, maintain the order from lowest to highest
+    if (isNumericEncoding && quantileBins) {
+      const aIndex = quantileBins.labels.indexOf(a);
+      const bIndex = quantileBins.labels.indexOf(b);
+      if (aIndex >= 0 && bIndex >= 0) return aIndex - bIndex;
+    }
+    
+    // For categorical, maintain original order (alphabetical from Set)
+    return 0;
+  });
 
   // In selection mode, we use a different coloring strategy
   const defaultUnselectedColor = '#94a3b8'; // Grey for unselected in selection mode
   
   const colorScale = d3.scaleOrdinal()
     .domain(categories)
-    .range(categories.map((_, idx) => {
+    .range(categories.map((cat, idx) => {
+      // "Not specified" should always be grey
+      if (cat === 'Not specified' || cat === fallbackCategory) {
+        return '#94a3b8'; // Grey for not specified
+      }
+      
       if (inSelectionMode) {
         // In selection mode, colorScale returns grey - actual colors come from getSelectionModeColor
         return defaultUnselectedColor;
@@ -769,6 +840,18 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       } else if (categories.length === 1) {
         return d3.interpolateRainbow(0.35);
       }
+      // For numeric encoding, use sequential color scheme (blue-green-yellow-red gradient)
+      if (isNumericEncoding && quantileBins) {
+        // Map to a sequential color scale: light to dark or cool to warm
+        const colors = ['#3288bd', '#66c2a5', '#fee08b', '#f46d43', '#d53e4f']; // Cool to warm
+        // Find the index in the quantile bins labels
+        const binIndex = quantileBins.labels.indexOf(cat);
+        if (binIndex >= 0) {
+          return colors[binIndex];
+        }
+        return colors[colors.length - 1];
+      }
+      // For categorical encoding, use rainbow
       return d3.interpolateRainbow(idx / categories.length);
     }));
   

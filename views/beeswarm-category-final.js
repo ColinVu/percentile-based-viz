@@ -338,11 +338,12 @@ function renderBeeswarmCategoryFinal(metricKey) {
   // Ensure checkbox exists
   ensureFinalViewBeeswarmCheckbox();
   
-  // Check if we should render box plot instead
+  // Always render the beeswarm
+  renderBeeswarmCategoryFinalActual(metricKey);
+  
+  // If box plot mode is enabled, overlay the box plot on top
   if (window.appState.finalViewBoxPlotMode) {
-    renderBoxPlotCategoryFinal(metricKey);
-  } else {
-    renderBeeswarmCategoryFinalActual(metricKey);
+    renderBoxPlotOverlay(metricKey);
   }
   
   // Update map if visible
@@ -1486,6 +1487,121 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
     .attr('font-weight', 'bold')
     .style('user-select', 'none')
     .text(window.formatMetricName(metricKey));
+  
+  // Store values for box plot overlay if needed
+  window._beeswarmPlotData = {
+    y: y,
+    xCenter: xCenter,
+    sortedVals: sortedVals,
+    plotPaddingLeft: plotPaddingLeft,
+    plotPaddingRight: plotPaddingRight,
+    plotPaddingTop: plotPaddingTop,
+    plotPaddingBottom: plotPaddingBottom,
+    width: width,
+    height: height
+  };
+}
+
+// Box plot overlay function - draws semitransparent box plot on top of beeswarm
+function renderBoxPlotOverlay(metricKey) {
+  const svg = d3.select('#beeswarm-svg');
+  if (!svg.node()) return;
+  
+  // Get plot data from the beeswarm render
+  const plotData = window._beeswarmPlotData;
+  if (!plotData) return;
+  
+  const { y, xCenter, sortedVals, plotPaddingLeft, plotPaddingRight, plotPaddingTop, plotPaddingBottom, width, height } = plotData;
+  
+  if (!sortedVals || sortedVals.length === 0) return;
+  
+  // Compute quartiles and whiskers using 1.5*IQR rule for extremes
+  const q1 = d3.quantileSorted(sortedVals, 0.25);
+  const median = d3.quantileSorted(sortedVals, 0.5);
+  const q3 = d3.quantileSorted(sortedVals, 0.75);
+  const iqr = (q3 - q1);
+  const lowerWhiskerVal = sortedVals.find(v => v >= (q1 - 1.5 * iqr)) ?? sortedVals[0];
+  const upperWhiskerVal = [...sortedVals].reverse().find(v => v <= (q3 + 1.5 * iqr)) ?? sortedVals[sortedVals.length - 1];
+  
+  const boxWidth = 80;
+  
+  // Remove any existing box plot overlay elements
+  svg.selectAll('.box-plot-overlay').remove();
+  
+  // Create a group for the box plot overlay
+  const overlayGroup = svg.append('g').attr('class', 'box-plot-overlay');
+  
+  // Lower whisker line (from lower extreme to bottom of box)
+  // Q1 is bottom of box (25th percentile), Q3 is top (75th percentile)
+  // In SVG: y(lowerWhiskerVal) > y(Q1) because lower values are at bottom
+  overlayGroup.append('line')
+    .attr('x1', xCenter)
+    .attr('x2', xCenter)
+    .attr('y1', y(lowerWhiskerVal))  // Lower extreme (bottom)
+    .attr('y2', y(q1) + 2)           // Stop just before bottom of box
+    .attr('stroke', '#64748b')
+    .attr('stroke-width', 2)
+    .attr('opacity', 0.6)
+    .attr('pointer-events', 'none');
+  
+  // Upper whisker line (from top of box to upper extreme)
+  // Q3 is top of box, so whisker goes from Q3 up to upperWhiskerVal
+  overlayGroup.append('line')
+    .attr('x1', xCenter)
+    .attr('x2', xCenter)
+    .attr('y1', y(q3) - 2)           // Start just after top of box
+    .attr('y2', y(upperWhiskerVal))  // Upper extreme (top)
+    .attr('stroke', '#64748b')
+    .attr('stroke-width', 2)
+    .attr('opacity', 0.6)
+    .attr('pointer-events', 'none');
+  
+  // Box (Q1 to Q3) - semitransparent
+  overlayGroup.append('rect')
+    .attr('x', xCenter - boxWidth / 2)
+    .attr('y', y(q3))
+    .attr('width', boxWidth)
+    .attr('height', Math.max(1, y(q1) - y(q3)))
+    .attr('rx', 4)
+    .attr('ry', 4)
+    .attr('fill', '#94a3b8')
+    .attr('fill-opacity', 0.3)
+    .attr('stroke', '#64748b')
+    .attr('stroke-width', 2)
+    .attr('stroke-opacity', 0.7)
+    .attr('pointer-events', 'none');
+  
+  // Median line (horizontal line at median value, across the box width)
+  overlayGroup.append('line')
+    .attr('x1', xCenter - boxWidth / 2)
+    .attr('x2', xCenter + boxWidth / 2)
+    .attr('y1', y(median))
+    .attr('y2', y(median))
+    .attr('stroke', '#1e293b')
+    .attr('stroke-width', 2)
+    .attr('opacity', 0.8)
+    .attr('pointer-events', 'none');
+  
+  // Whisker caps at extremes
+  overlayGroup.append('line')
+    .attr('x1', xCenter - boxWidth / 4)
+    .attr('x2', xCenter + boxWidth / 4)
+    .attr('y1', y(lowerWhiskerVal))
+    .attr('y2', y(lowerWhiskerVal))
+    .attr('stroke', '#64748b')
+    .attr('stroke-width', 2)
+    .attr('opacity', 0.6)
+    .attr('pointer-events', 'none');
+  
+  overlayGroup.append('line')
+    .attr('x1', xCenter - boxWidth / 4)
+    .attr('x2', xCenter + boxWidth / 4)
+    .attr('y1', y(upperWhiskerVal))
+    .attr('y2', y(upperWhiskerVal))
+    .attr('stroke', '#64748b')
+    .attr('stroke-width', 2)
+    .attr('opacity', 0.6)
+    .attr('pointer-events', 'none');
 }
 
 window.renderBeeswarmCategoryFinal = renderBeeswarmCategoryFinal;

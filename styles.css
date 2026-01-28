@@ -156,15 +156,19 @@ body.sidebar-open {
   z-index: 1200;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 20px;
 }
 
 .header-title {
   display: flex;
-  flex-direction: row;
-  gap: 20px;
-  align-items:end;
+  flex-direction: column;
+  align-items: center;
+  gap: 0px;
+}
+
+.header-title h1,
+.header-title h2 {
+  margin: 0;
 }
 
 h2 {
@@ -180,23 +184,30 @@ h1 {
 }
 
 .header-left {
+  flex: 1;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
-  min-width: 280px;
+  min-width: 0;
 }
 
 .header-center {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
 }
 
 .header-right {
+  flex: 1;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
-  min-width: 300px;
-  padding-right: 20px;
+  min-width: 0;
+  padding-right: 0;
 }
 
 .header-dataset {
@@ -713,6 +724,7 @@ select {
   border-radius: 4px;
   pointer-events: none;
   font-size: 12px;
+  user-select: none;
 }
 
 .hover-label {
@@ -726,6 +738,7 @@ select {
   border-radius: 0 !important;
   font-size: 12px;
   font-weight: bold;
+  user-select: none;
 }
 
 .scroll-section {

@@ -503,6 +503,11 @@ function processData() {
       }, 100);
     }
   }
+  
+  // Update the Selected Locations dropdowns when dataset changes
+  if (typeof window.renderSelectionTable === 'function') {
+    window.renderSelectionTable();
+  }
 }
 
 // Export functions to window

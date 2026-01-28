@@ -613,6 +613,7 @@ function renderBoxPlotCategoryFinal(metricKey) {
     .on('mouseenter', function() {
       hoverLine.style('display', null);
       hoverLabel.classList.remove('hidden');
+      hoverLabel.style.userSelect = 'none';
     })
     .on('mousemove', function(evt) {
       const [, my] = d3.pointer(evt);
@@ -1057,7 +1058,8 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
         tooltip.html(htmlParts.join('<br>'))
           .classed('hidden', false)
           .style('left', (evt.offsetX + 32) + 'px')
-          .style('top', adjustedTop + 'px');
+          .style('top', adjustedTop + 'px')
+          .style('user-select', 'none');
         d3.select(this)
           .attr('stroke', '#d35400')
           .attr('stroke-width', 1.5)
@@ -1253,7 +1255,8 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       tooltip.html(htmlParts.join('<br>'))
         .classed('hidden', false)
         .style('left', (evt.offsetX + 32) + 'px')
-        .style('top', adjustedTop + 'px');
+        .style('top', adjustedTop + 'px')
+        .style('user-select', 'none');
       d3.select(this)
         .attr('stroke', '#111827')
         .attr('stroke-width', 2.5)
@@ -1398,6 +1401,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       hoverLabel.style.padding = '0';
       hoverLabel.style.borderRadius = '0';
       hoverLabel.style.fontWeight = 'normal';
+      hoverLabel.style.userSelect = 'none';
     })
     .on('mousemove', function(evt) {
       const [, my] = d3.pointer(evt);

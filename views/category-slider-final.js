@@ -68,7 +68,9 @@ function renderCategoryMetricListFinal() {
   headerRow.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; padding: 6px 8px; font-weight: bold; font-size: 10px; color: #475569; border-bottom: 1px solid #e2e8f0; background: #f8fafc; z-index: 10;';
   
   const metricHeader = document.createElement('span');
-  metricHeader.textContent = 'Metric';
+  metricHeader.textContent = window.appState.selectedCountry 
+    ? `Metric: ${window.appState.selectedCountry}` 
+    : 'Metric';
   
   const percentileHeader = document.createElement('span');
   percentileHeader.textContent = 'Percentile/100%';

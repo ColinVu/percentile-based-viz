@@ -184,7 +184,7 @@
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'filter-remove-btn';
-    removeBtn.textContent = '−';
+    removeBtn.innerHTML = '&times;';
     removeBtn.addEventListener('click', () => filterSelectRemoveFilter(filter.id));
     firstLine.appendChild(removeBtn);
 

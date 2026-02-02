@@ -40,9 +40,16 @@
   <!-- Collapsible Sidebar -->
   <div class="sidebar open" id="sidebar">
     <div class="sidebar-header">
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab active" data-tab="controls" type="button">Controls</button>
+        <button class="sidebar-tab" data-tab="h-index" type="button">H-index</button>
+        <button class="sidebar-tab" data-tab="summation" type="button">Summation</button>
+        <button class="sidebar-tab" data-tab="outlier-data" type="button">Outlier Data</button>
+      </div>
     </div>
     
     <div class="sidebar-content">
+      <div class="tab-panel active" id="controls-tab-panel">
       <div class="control-section" style="display: none;">
         <h3>View Mode</h3>
         <select class="toggle-view-select" id="toggle-view">
@@ -91,7 +98,10 @@
         <h3>Selected Locations</h3>
         <div class="selection-table-container" id="selection-table-container">
           <div class="selection-table" id="selection-table"></div>
-          <button class="selection-table-add-btn" id="selection-table-add" title="Add location">+</button>
+          <div class="selection-table-controls">
+            <span class="selection-table-count-label">Records found: <span id="selection-table-count">0</span></span>
+            <button class="selection-table-add-btn" id="selection-table-add" title="Add location">+</button>
+          </div>
         </div>
       </div>
 
@@ -150,6 +160,19 @@
           <option value="">Select a county...</option>
         </select>
       </div>
+      </div>
+
+      <div class="tab-panel" id="h-index-tab-panel">
+        <div id="h-index-content" class="h-index-container"></div>
+      </div>
+
+      <div class="tab-panel" id="summation-tab-panel">
+        <div id="summation-content" class="summation-container"></div>
+      </div>
+
+      <div class="tab-panel" id="outlier-data-tab-panel">
+        <div id="outlier-data-content" class="outlier-data-container"></div>
+      </div>
     </div>
   </div>
 
@@ -159,8 +182,8 @@
       <label for="dataset-select" class="header-dataset-label">Dataset</label>
       <div class="header-dataset">
         <select id="dataset-select">
-          <option value="us-counties" selected>US County Indicators</option>
-          <option value="country-development">Country Development Indicators</option>
+          <option value="country-development" selected>Country Development Indicators</option>
+          <option value="us-counties">US County Indicators</option>
           <option value="colleges">Colleges</option>
           <option value="custom">Custom Dataset</option>
         </select>
@@ -258,6 +281,9 @@
   <script src="views/category-slider-v6.js"></script>
   <script src="views/beeswarm-category-final.js"></script>
   <script src="views/category-slider-final.js"></script>
+  <script src="views/h-index.js"></script>
+  <script src="views/summation.js"></script>
+  <script src="views/outlier-data.js"></script>
   <script src="views/map-panel.js"></script>
   <script src="views/beeswarm-category-multiselect.js"></script>
   <script src="views/category-slider-v7.js"></script>
@@ -930,6 +956,12 @@
         
         const locations = window.appState.selectionModeLocations || [];
         
+        // Update records count (total available in dropdown, excluding placeholder)
+        const countEl = document.getElementById('selection-table-count');
+        const countrySelect = document.getElementById('countrySelect');
+        const dropdownOptions = countrySelect ? Array.from(countrySelect.options).filter(opt => opt.value !== '') : [];
+        if (countEl) countEl.textContent = String(dropdownOptions.length);
+        
         if (locations.length === 0) {
           const emptyMsg = document.createElement('div');
           emptyMsg.className = 'selection-table-empty';
@@ -939,7 +971,6 @@
         }
         
         // Get available options from the country select
-        const countrySelect = document.getElementById('countrySelect');
         const options = countrySelect ? Array.from(countrySelect.options) : [];
         
         locations.forEach((loc, idx) => {
@@ -1040,10 +1071,15 @@
               const newOpt = document.createElement('option');
               newOpt.value = opt.value;
               newOpt.textContent = opt.textContent;
-              if (opt.value === loc.location) newOpt.selected = true;
               select.appendChild(newOpt);
             }
           });
+          // Set the dropdown value
+          console.log('[SELECTION] Setting dropdown for row', idx, 'location:', loc.location);
+          if (loc.location) {
+            select.value = loc.location;
+            console.log('[SELECTION] Dropdown value set to:', select.value);
+          }
           select.addEventListener('change', function(evt) {
             evt.stopPropagation();
             loc.location = this.value;
@@ -1132,6 +1168,7 @@
       // Add new location row
       function addSelectionRow(locationValue = '') {
         const color = getNextSelectionColor();
+        console.log('[SELECTION] Adding row with location:', locationValue);
         window.appState.selectionModeLocations.push({
           location: locationValue,
           color: color
@@ -1143,13 +1180,23 @@
       
       // Initialize selection table from current selected country
       function initSelectionTableFromCurrent() {
-        if (window.appState.selectionModeLocations.length === 0 && window.appState.selectedCountry) {
-          addSelectionRow(window.appState.selectedCountry);
-        } else if (window.appState.selectionModeLocations.length === 0) {
-          // Add an empty row to start
-          addSelectionRow('');
+        console.log('[SELECTION] initSelectionTableFromCurrent called, selectedCountry:', window.appState.selectedCountry, 'existing locations:', window.appState.selectionModeLocations.length);
+        if (window.appState.selectionModeLocations.length === 0) {
+          // No locations yet - add one
+          if (window.appState.selectedCountry) {
+            addSelectionRow(window.appState.selectedCountry);
+          } else {
+            addSelectionRow('');
+          }
+        } else if (window.appState.selectedCountry) {
+          // Check if first location is empty and update it
+          const firstLoc = window.appState.selectionModeLocations[0];
+          if (firstLoc && !firstLoc.location) {
+            console.log('[SELECTION] Updating empty first location to:', window.appState.selectedCountry);
+            firstLoc.location = window.appState.selectedCountry;
+            renderSelectionTable();
+          }
         }
-        renderSelectionTable();
       }
       
       if (selectionTableAddBtn) {
@@ -1340,6 +1387,73 @@
       }
       
       sidebarToggle.addEventListener('click', toggleSidebar);
+      
+      // Sidebar tab switching
+      document.querySelectorAll('.sidebar-tab').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          const tabId = this.dataset.tab;
+          document.querySelectorAll('.sidebar-tab').forEach(function(b) { b.classList.remove('active'); });
+          document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+          this.classList.add('active');
+          const panel = document.getElementById(tabId + '-tab-panel');
+          if (panel) panel.classList.add('active');
+
+          // When switching to H-index tab, render with current location and percentiles
+          if (tabId === 'h-index' && typeof window.renderHIndex === 'function') {
+            const selectedLocation = window.appState.selectedCountry || '';
+            if (selectedLocation) window.calculatePercentiles(selectedLocation);
+
+            const metrics = (typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [])
+              .filter(function(m) {
+                const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+                return norm !== 'fipscode';
+              });
+
+            const percentiles = metrics
+              .map(function(m) {
+                const p = window.appState.currentPercentiles[m];
+                const pct = (p && typeof p.percentile === 'number') ? p.percentile : -1;
+                const val = (p && typeof p.value === 'number') ? p.value : null;
+                return { metricKey: m, percentile: pct, value: val };
+              })
+              .sort(function(a, b) { return b.percentile - a.percentile; });
+
+            window.renderHIndex({ selectedLocation: selectedLocation, percentiles: percentiles });
+          }
+
+          // When switching to Summation tab, render with current location and percentiles
+          if (tabId === 'summation' && typeof window.renderSummation === 'function') {
+            const selectedLocation = window.appState.selectedCountry || '';
+            if (selectedLocation) window.calculatePercentiles(selectedLocation);
+
+            const metrics = (typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [])
+              .filter(function(m) {
+                const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+                return norm !== 'fipscode';
+              });
+
+            const percentiles = metrics
+              .map(function(m) {
+                const p = window.appState.currentPercentiles[m];
+                const pct = (p && typeof p.percentile === 'number') ? p.percentile : -1;
+                const val = (p && typeof p.value === 'number') ? p.value : null;
+                return { metricKey: m, percentile: pct, value: val };
+              })
+              .sort(function(a, b) { return b.percentile - a.percentile; });
+
+            window.renderSummation({ selectedLocation: selectedLocation, percentiles: percentiles });
+          }
+
+          // When switching to Outlier Data tab, compute and render only once
+          if (tabId === 'outlier-data' && typeof window.renderOutlierData === 'function') {
+            // Check if already computed
+            if (!window.appState.outlierDataComputed) {
+              window.appState.outlierDataComputed = true;
+              window.renderOutlierData();
+            }
+          }
+        });
+      });
       
       // State dropdown change event
       document.getElementById('stateSelect').addEventListener('change', function() {

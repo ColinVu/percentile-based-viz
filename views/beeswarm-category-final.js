@@ -1532,8 +1532,6 @@ function renderBoxPlotOverlay(metricKey) {
   const overlayGroup = svg.append('g').attr('class', 'box-plot-overlay');
   
   // Lower whisker line (from lower extreme to bottom of box)
-  // Q1 is bottom of box (25th percentile), Q3 is top (75th percentile)
-  // In SVG: y(lowerWhiskerVal) > y(Q1) because lower values are at bottom
   overlayGroup.append('line')
     .attr('x1', xCenter)
     .attr('x2', xCenter)
@@ -1545,7 +1543,6 @@ function renderBoxPlotOverlay(metricKey) {
     .attr('pointer-events', 'none');
   
   // Upper whisker line (from top of box to upper extreme)
-  // Q3 is top of box, so whisker goes from Q3 up to upperWhiskerVal
   overlayGroup.append('line')
     .attr('x1', xCenter)
     .attr('x2', xCenter)

@@ -327,6 +327,13 @@ function showCorsInfo() {
 
 // Process the loaded data
 function processData() {
+  // Reset outlier data computation flag when new dataset is loaded
+  window.appState.outlierDataComputed = false;
+  
+  // Reset selection table when dataset changes
+  window.appState.selectionModeLocations = [];
+  window.appState.selectionModeActiveIndex = 0;
+  
   // Detect schema: Country vs County/State
   const firstRow = window.appState.jsonData && window.appState.jsonData.length > 0 ? window.appState.jsonData[0] : null;
   
@@ -417,20 +424,10 @@ function processData() {
     countrySelect.appendChild(option);
   });
   
-  // Set default selection
-  if (window.appState.geoMode === 'country') {
-    if (window.appState.entities.includes('United States')) {
-      countrySelect.value = 'United States';
-      window.appState.selectedCountry = 'United States';
-    } else if (window.appState.entities.length > 0) {
-      countrySelect.value = window.appState.entities[0];
-      window.appState.selectedCountry = window.appState.entities[0];
-    }
-  } else {
-    if (window.appState.entities.length > 0) {
-      countrySelect.value = window.appState.entities[0];
-      window.appState.selectedCountry = window.appState.entities[0];
-    }
+  // Set default selection (first record)
+  if (window.appState.entities.length > 0) {
+    countrySelect.value = window.appState.entities[0];
+    window.appState.selectedCountry = window.appState.entities[0];
   }
   
   // Update nominal columns for encoded color view
@@ -505,6 +502,9 @@ function processData() {
   }
   
   // Update the Selected Locations dropdowns when dataset changes
+  if (typeof window.initSelectionTableFromCurrent === 'function') {
+    window.initSelectionTableFromCurrent();
+  }
   if (typeof window.renderSelectionTable === 'function') {
     window.renderSelectionTable();
   }

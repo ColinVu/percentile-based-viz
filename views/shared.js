@@ -21,7 +21,8 @@ window.appState = {
   categoryEncodedField: '',
   multiSelectedLabels: [],
   filterSelectFilters: [],
-  filterSelectFilteredRows: []
+  filterSelectFilteredRows: [],
+  outlierDataComputed: false // Track if outlier data has been computed
 };
 
 // Format metric names for display

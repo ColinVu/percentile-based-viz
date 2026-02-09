@@ -1,116 +1,86 @@
 /**
  * Summation index view
- * Implements the additive framework from Book1.xlsx
- * Score = SUM over k-bands of (k × pct of variables in that band)
+ * Displays all records with their Summation scores in a 2-column layout.
+ * The summation score is calculated by summing (k × percentage of variables in each k-band),
+ * where k represents the distance from the median (50th percentile).
  */
-
-function getKValuesForSummation() {
-  // Same bands as spreadsheet
-  return [49.9, 49, 45, 40, 35, 30, 25, 20, 15, 10, 5, 1];
-}
-
-function isValidPercentile(p) {
-  return typeof p === 'number' && isFinite(p) && p >= 0 && p <= 100;
-}
-
-function computeSummationFramework(percentiles) {
-  const values = (percentiles || [])
-    .map(d => d?.percentile)
-    .filter(isValidPercentile);
-
-  const N = values.length;
-  if (N === 0) return { rows: [], totalScore: null };
-
-  // Distances from 50
-  const distances = values.map(p => Math.abs(p - 50));
-
-  const ks = getKValuesForSummation();
-  const rows = [];
-
-  let prevK = Infinity;
-  let totalScore = 0;
-
-  ks.forEach(k => {
-    const inBand = distances.filter(d => d >= k && d < prevK).length;
-    const pct = inBand / N;
-    const score = k * pct;
-
-    rows.push({
-      k,
-      lower: 50 - k,
-      upper: 50 + k,
-      pct,
-      score
-    });
-
-    totalScore += score;
-    prevK = k;
-  });
-
-  return { rows, totalScore };
-}
 
 /**
- * Renders the summation pane with the given data.
+ * Renders the Summation pane with all records and their scores.
+ * @param {HTMLElement} [container] - Optional container element. If not provided, uses #summation-content.
  */
-function renderSummation(data, container) {
+function renderSummation(container) {
   const el = container || document.getElementById('summation-content');
   if (!el) return;
 
-  const { selectedLocation, percentiles = [] } = data || {};
-  el.replaceChildren();
+  el.innerHTML = '<div class="summation-loading">Computing Summation scores...</div>';
 
-  const header = document.createElement('div');
-  header.className = 'h-index-header';
-  header.textContent = selectedLocation || 'No location selected';
-  el.appendChild(header);
+  // Run computation asynchronously to avoid blocking UI
+  setTimeout(() => {
+    // Check if derived data cache is computed
+    if (!window.appState.derivedDataCache.computed) {
+      if (typeof window.computeAllDerivedData === 'function') {
+        window.computeAllDerivedData();
+      }
+    }
 
-  if (!percentiles.length) {
-    const empty = document.createElement('div');
-    empty.className = 'h-index-empty';
-    empty.textContent = 'No percentile data available.';
-    el.appendChild(empty);
-    return;
-  }
+    const records = window.appState.derivedDataCache.records || [];
+    
+    el.innerHTML = '';
 
-  const { rows, totalScore } = computeSummationFramework(percentiles);
+    // Header
+    const header = document.createElement('div');
+    header.className = 'summation-header';
+    header.textContent = 'Summation Scores';
+    el.appendChild(header);
 
-  const table = document.createElement('table');
-  table.className = 'h-index-framework-table';
+    // Description
+    const description = document.createElement('div');
+    description.className = 'summation-description';
+    description.textContent = 'Weighted sum showing how far each record deviates from the median across all metrics.';
+    el.appendChild(description);
 
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>variable k</th>
-        <th>50 - k</th>
-        <th>50 + k</th>
-        <th>pct of vars. in this range</th>
-        <th>score</th>
-      </tr>
-    </thead>
-  `;
+    if (records.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'summation-empty';
+      empty.textContent = 'No data available. Please load a dataset first.';
+      el.appendChild(empty);
+      return;
+    }
 
-  const tbody = document.createElement('tbody');
+    // Sort by Summation score (highest first, nulls last)
+    const sortedRecords = records.slice().sort((a, b) => {
+      if (a.summationScore === null && b.summationScore === null) return 0;
+      if (a.summationScore === null) return 1;
+      if (b.summationScore === null) return -1;
+      return b.summationScore - a.summationScore;
+    });
 
-  rows.forEach(r => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.k}</td>
-      <td>${r.lower.toFixed(1)}</td>
-      <td>${r.upper.toFixed(1)}</td>
-      <td>${r.pct.toFixed(2)}</td>
-      <td>${r.score.toFixed(2)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+    // Create list container
+    const list = document.createElement('div');
+    list.className = 'summation-list';
 
-  table.appendChild(tbody);
-  el.appendChild(table);
+    sortedRecords.forEach(({ recordName, summationScore }) => {
+      const row = document.createElement('div');
+      row.className = 'summation-row';
 
-  const total = document.createElement('div');
-  total.className = 'h-index-framework-score';
-  total.textContent = `Total score: ${totalScore.toFixed(2)}`;
-  el.appendChild(total);
+      // Left column: Record name
+      const nameCol = document.createElement('div');
+      nameCol.className = 'summation-name';
+      nameCol.textContent = recordName;
+
+      // Right column: Score
+      const scoreCol = document.createElement('div');
+      scoreCol.className = 'summation-score';
+      scoreCol.textContent = summationScore !== null ? summationScore.toFixed(2) : '—';
+
+      row.appendChild(nameCol);
+      row.appendChild(scoreCol);
+      list.appendChild(row);
+    });
+
+    el.appendChild(list);
+  }, 10);
 }
 
 window.renderSummation = renderSummation;

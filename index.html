@@ -1398,59 +1398,19 @@
           const panel = document.getElementById(tabId + '-tab-panel');
           if (panel) panel.classList.add('active');
 
-          // When switching to H-index tab, render with current location and percentiles
+          // When switching to H-index tab, render all records with their H-index scores
           if (tabId === 'h-index' && typeof window.renderHIndex === 'function') {
-            const selectedLocation = window.appState.selectedCountry || '';
-            if (selectedLocation) window.calculatePercentiles(selectedLocation);
-
-            const metrics = (typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [])
-              .filter(function(m) {
-                const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-                return norm !== 'fipscode';
-              });
-
-            const percentiles = metrics
-              .map(function(m) {
-                const p = window.appState.currentPercentiles[m];
-                const pct = (p && typeof p.percentile === 'number') ? p.percentile : -1;
-                const val = (p && typeof p.value === 'number') ? p.value : null;
-                return { metricKey: m, percentile: pct, value: val };
-              })
-              .sort(function(a, b) { return b.percentile - a.percentile; });
-
-            window.renderHIndex({ selectedLocation: selectedLocation, percentiles: percentiles });
+            window.renderHIndex();
           }
 
-          // When switching to Summation tab, render with current location and percentiles
+          // When switching to Summation tab, render all records with their summation scores
           if (tabId === 'summation' && typeof window.renderSummation === 'function') {
-            const selectedLocation = window.appState.selectedCountry || '';
-            if (selectedLocation) window.calculatePercentiles(selectedLocation);
-
-            const metrics = (typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [])
-              .filter(function(m) {
-                const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-                return norm !== 'fipscode';
-              });
-
-            const percentiles = metrics
-              .map(function(m) {
-                const p = window.appState.currentPercentiles[m];
-                const pct = (p && typeof p.percentile === 'number') ? p.percentile : -1;
-                const val = (p && typeof p.value === 'number') ? p.value : null;
-                return { metricKey: m, percentile: pct, value: val };
-              })
-              .sort(function(a, b) { return b.percentile - a.percentile; });
-
-            window.renderSummation({ selectedLocation: selectedLocation, percentiles: percentiles });
+            window.renderSummation();
           }
 
-          // When switching to Outlier Data tab, compute and render only once
+          // When switching to Outlier Data tab, render all records with outliers
           if (tabId === 'outlier-data' && typeof window.renderOutlierData === 'function') {
-            // Check if already computed
-            if (!window.appState.outlierDataComputed) {
-              window.appState.outlierDataComputed = true;
-              window.renderOutlierData();
-            }
+            window.renderOutlierData();
           }
         });
       });

@@ -22,7 +22,12 @@ window.appState = {
   multiSelectedLabels: [],
   filterSelectFilters: [],
   filterSelectFilteredRows: [],
-  outlierDataComputed: false // Track if outlier data has been computed
+  outlierDataComputed: false, // Track if outlier data has been computed
+  // Centralized derived data cache (computed once per dataset)
+  derivedDataCache: {
+    computed: false,
+    records: [] // Array of {recordName, hIndexScore, summationScore, outliers, percentiles}
+  }
 };
 
 // Format metric names for display
@@ -236,4 +241,160 @@ window.getNumericMetrics = getNumericMetrics;
 window.getNominalColumns = getNominalColumns;
 window.formatValue = formatValue;
 window.updateCountryInfo = updateCountryInfo;
+
+/**
+ * Compute all derived data (percentiles, h-index, summation, outliers) for all records.
+ * This is called once per dataset and cached.
+ */
+function computeAllDerivedData() {
+  if (!window.appState.jsonData || window.appState.jsonData.length === 0) {
+    window.appState.derivedDataCache = { computed: true, records: [] };
+    return;
+  }
+
+  console.log('[DERIVED DATA] Computing all derived data for dataset...');
+
+  // Get numeric metrics (exclude FIPS codes)
+  const metrics = (typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [])
+    .filter(m => {
+      const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+      return norm !== 'fipscode';
+    });
+
+  if (metrics.length === 0) {
+    window.appState.derivedDataCache = { computed: true, records: [] };
+    return;
+  }
+
+  const data = window.appState.jsonData;
+  
+  // Determine record identifier column
+  let idColumn;
+  if (window.appState.geoMode === 'country') {
+    idColumn = 'Country';
+  } else if (window.appState.geoMode === 'county') {
+    idColumn = '__displayName';
+  } else {
+    idColumn = window.appState.dataColumn;
+  }
+
+  const records = [];
+
+  data.forEach(record => {
+    const recordName = record[idColumn] || 'Unknown';
+    
+    // Calculate percentiles for this record
+    const percentiles = [];
+    metrics.forEach(metric => {
+      const value = record[metric];
+      
+      // Skip invalid values
+      if (value === '..' || value === undefined || value === null) return;
+      const numValue = typeof value === 'number' ? value : parseFloat(value);
+      if (isNaN(numValue)) return;
+
+      // Get all valid values for this metric
+      const validValues = data
+        .map(d => d[metric])
+        .filter(v => v !== '..' && v !== undefined && v !== null)
+        .map(v => typeof v === 'number' ? v : parseFloat(v))
+        .filter(v => !isNaN(v));
+
+      if (validValues.length < 3) return;
+
+      // Calculate percentile
+      validValues.sort((a, b) => a - b);
+      const smaller = validValues.filter(v => v < numValue).length;
+      const equal = validValues.filter(v => v === numValue).length;
+      const percentile = Math.round((smaller + 0.5 * equal) / validValues.length * 100);
+
+      percentiles.push({
+        metricKey: metric,
+        percentile: percentile,
+        value: numValue
+      });
+    });
+
+    // Compute H-index score
+    const hIndexScore = computeHIndexScore(percentiles);
+
+    // Compute Summation score
+    const summationScore = computeSummationScore(percentiles);
+
+    // Compute outliers (top 5% or bottom 5%)
+    const outliers = [];
+    percentiles.forEach(({ metricKey, percentile, value }) => {
+      if (percentile <= 5) {
+        outliers.push({ metric: metricKey, position: 'bottom', percentile, value });
+      } else if (percentile >= 95) {
+        outliers.push({ metric: metricKey, position: 'top', percentile, value });
+      }
+    });
+
+    records.push({
+      recordName,
+      hIndexScore,
+      summationScore,
+      outliers,
+      percentiles
+    });
+  });
+
+  window.appState.derivedDataCache = {
+    computed: true,
+    records: records
+  };
+
+  console.log('[DERIVED DATA] Computed data for', records.length, 'records');
+}
+
+/**
+ * Compute H-index score from percentiles
+ */
+function computeHIndexScore(percentiles) {
+  const pctValues = (percentiles || [])
+    .map(d => d?.percentile)
+    .filter(p => typeof p === 'number' && isFinite(p) && p >= 0 && p <= 100);
+
+  let best = null;
+  for (let k = 1; k <= 50; k++) {
+    let count = 0;
+    for (const p of pctValues) {
+      if (Math.abs(p - 50) >= k) count++;
+    }
+    if (count > k) best = k;
+  }
+  return best;
+}
+
+/**
+ * Compute Summation score from percentiles
+ */
+function computeSummationScore(percentiles) {
+  const values = (percentiles || [])
+    .map(d => d?.percentile)
+    .filter(p => typeof p === 'number' && isFinite(p) && p >= 0 && p <= 100);
+
+  const N = values.length;
+  if (N === 0) return null;
+
+  // Distances from 50
+  const distances = values.map(p => Math.abs(p - 50));
+
+  const ks = [49.9, 49, 45, 40, 35, 30, 25, 20, 15, 10, 5, 1];
+  let prevK = Infinity;
+  let totalScore = 0;
+
+  ks.forEach(k => {
+    const inBand = distances.filter(d => d >= k && d < prevK).length;
+    const pct = inBand / N;
+    const score = k * pct;
+    totalScore += score;
+    prevK = k;
+  });
+
+  return totalScore;
+}
+
+window.computeAllDerivedData = computeAllDerivedData;
 

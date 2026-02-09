@@ -162,15 +162,29 @@ body:not(.sidebar-open) .sidebar-toggle {
   font-weight: 600;
   font-size: 15px;
   color: #2c3e50;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
   padding-bottom: 8px;
   border-bottom: 1px solid #e2e8f0;
+}
+
+.h-index-description {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 12px;
+  line-height: 1.4;
 }
 
 .h-index-empty {
   color: #94a3b8;
   font-size: 13px;
   padding: 12px 0;
+}
+
+.h-index-loading {
+  color: #64748b;
+  font-size: 12px;
+  padding: 8px 0;
+  text-align: center;
 }
 
 .h-index-list {
@@ -187,68 +201,30 @@ body:not(.sidebar-open) .sidebar-toggle {
   align-items: baseline;
   gap: 12px;
   font-size: 13px;
-  padding: 4px 0;
+  padding: 6px 8px;
   border-bottom: 1px solid #f1f5f9;
 }
 
-.h-index-metric {
+.h-index-row:hover {
+  background-color: #f8fafc;
+}
+
+.h-index-name {
   flex: 1;
   color: #334155;
   min-width: 0;
+  font-weight: 500;
 }
 
-.h-index-percentile {
+.h-index-score {
   font-weight: 600;
   color: #1e293b;
   flex-shrink: 0;
+  min-width: 40px;
+  text-align: right;
 }
 
-.h-index-value {
-  color: #64748b;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.h-index-framework-score {
-  font-weight: bold;
-}
-
-.h-index-framework-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 12px 0;
-  font-size: 13px;
-}
-
-.h-index-framework-table th,
-.h-index-framework-table td {
-  padding: 6px 8px;
-  text-align: left;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.h-index-framework-table th {
-  font-weight: 600;
-  color: #475569;
-  background-color: #f8fafc;
-}
-
-.h-index-framework-table tbody tr:hover {
-  background-color: #f8fafc;
-}
-
-.h-index-framework-table .h-index-framework-row--score {
-  background-color: #fef3c7;
-  font-weight: 600;
-}
-
-.h-index-framework-meta {
-  font-size: 12px;
-  color: #64748b;
-  margin-bottom: 8px;
-}
-
-/* Summation pane (clone of h-index) */
+/* Summation pane */
 .summation-container {
   padding: 0;
 }
@@ -257,15 +233,29 @@ body:not(.sidebar-open) .sidebar-toggle {
   font-weight: 600;
   font-size: 15px;
   color: #2c3e50;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
   padding-bottom: 8px;
   border-bottom: 1px solid #e2e8f0;
+}
+
+.summation-description {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 12px;
+  line-height: 1.4;
 }
 
 .summation-empty {
   color: #94a3b8;
   font-size: 13px;
   padding: 12px 0;
+}
+
+.summation-loading {
+  color: #64748b;
+  font-size: 12px;
+  padding: 8px 0;
+  text-align: center;
 }
 
 .summation-list {
@@ -282,26 +272,27 @@ body:not(.sidebar-open) .sidebar-toggle {
   align-items: baseline;
   gap: 12px;
   font-size: 13px;
-  padding: 4px 0;
+  padding: 6px 8px;
   border-bottom: 1px solid #f1f5f9;
 }
 
-.summation-metric {
+.summation-row:hover {
+  background-color: #f8fafc;
+}
+
+.summation-name {
   flex: 1;
   color: #334155;
   min-width: 0;
+  font-weight: 500;
 }
 
-.summation-percentile {
+.summation-score {
   font-weight: 600;
   color: #1e293b;
   flex-shrink: 0;
-}
-
-.summation-value {
-  color: #64748b;
-  font-size: 12px;
-  flex-shrink: 0;
+  min-width: 60px;
+  text-align: right;
 }
 
 .summation-framework-score {
@@ -317,9 +308,15 @@ body:not(.sidebar-open) .sidebar-toggle {
   font-weight: 600;
   font-size: 13px;
   color: #2c3e50;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.outlier-data-description {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
 }
 
 .outlier-data-empty {
@@ -378,6 +375,54 @@ body:not(.sidebar-open) .sidebar-toggle {
 .outlier-data-metric-line.outlier-top {
   color: #166534;
 }
+
+.outlier-data-count {
+  flex: 0 0 40px;
+  text-align: right;
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 13px;
+}
+
+.outlier-data-tooltip {
+  position: fixed;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  max-width: 300px;
+  pointer-events: none;
+  font-size: 12px;
+}
+
+.outlier-data-tooltip.hidden {
+  display: none;
+}
+
+.outlier-tooltip-item {
+  margin-bottom: 3px;
+  line-height: 1.4;
+}
+
+.outlier-tooltip-item:last-child {
+  margin-bottom: 0;
+}
+
+.outlier-tooltip-item.outlier-bottom {
+  color: #991b1b;
+}
+
+.outlier-tooltip-item.outlier-top {
+  color: #166534;
+}
+
+.outlier-data-row:hover {
+  background-color: #f8fafc;
+  cursor: pointer;
+}
+
 
 .control-section {
   margin-bottom: 25px;

@@ -4,101 +4,7 @@
  */
 
 /**
- * Computes outlier data for all records in the dataset.
- * For each metric, identifies records in top 5% and bottom 5%.
- * @returns {Array<{recordName: string, outliers: Array<{metric: string, position: 'top'|'bottom', percentile: number}>}>}
- */
-function computeOutlierData() {
-  if (!window.appState.jsonData || window.appState.jsonData.length === 0) {
-    return [];
-  }
-
-  // Get numeric metrics (exclude FIPS codes)
-  const metrics = (typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [])
-    .filter(m => {
-      const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-      return norm !== 'fipscode';
-    });
-
-  if (metrics.length === 0) return [];
-
-  const data = window.appState.jsonData;
-  
-  // Determine record identifier column
-  let idColumn;
-  if (window.appState.geoMode === 'country') {
-    idColumn = 'Country';
-  } else if (window.appState.geoMode === 'county') {
-    idColumn = '__displayName';
-  } else {
-    idColumn = window.appState.dataColumn;
-  }
-
-  // For each record, find which metrics they're an outlier in
-  const results = [];
-
-  data.forEach(record => {
-    const recordName = record[idColumn] || 'Unknown';
-    const outliers = [];
-
-    metrics.forEach(metric => {
-      const value = record[metric];
-      
-      // Skip invalid values
-      if (value === '..' || value === undefined || value === null) return;
-      const numValue = typeof value === 'number' ? value : parseFloat(value);
-      if (isNaN(numValue)) return;
-
-      // Get all valid values for this metric
-      const validValues = data
-        .map(d => d[metric])
-        .filter(v => v !== '..' && v !== undefined && v !== null)
-        .map(v => typeof v === 'number' ? v : parseFloat(v))
-        .filter(v => !isNaN(v));
-
-      if (validValues.length < 3) return;
-
-      // Calculate percentile
-      validValues.sort((a, b) => a - b);
-      const smaller = validValues.filter(v => v < numValue).length;
-      const equal = validValues.filter(v => v === numValue).length;
-      const percentile = Math.round((smaller + 0.5 * equal) / validValues.length * 100);
-
-      // Check if outlier (top 5% or bottom 5%)
-      if (percentile <= 5) {
-        outliers.push({
-          metric: metric,
-          position: 'bottom',
-          percentile: percentile,
-          value: numValue
-        });
-      } else if (percentile >= 95) {
-        outliers.push({
-          metric: metric,
-          position: 'top',
-          percentile: percentile,
-          value: numValue
-        });
-      }
-    });
-
-    // Only include records that have at least one outlier
-    if (outliers.length > 0) {
-      results.push({
-        recordName: recordName,
-        outliers: outliers
-      });
-    }
-  });
-
-  // Sort by number of outliers (most outliers first)
-  results.sort((a, b) => b.outliers.length - a.outliers.length);
-
-  return results;
-}
-
-/**
- * Renders the outlier data view.
+ * Renders the outlier data view using cached derived data.
  * @param {HTMLElement} [container] - Optional container element. If not provided, uses #outlier-data-content.
  */
 function renderOutlierData(container) {
@@ -109,20 +15,78 @@ function renderOutlierData(container) {
 
   // Run computation asynchronously to avoid blocking UI
   setTimeout(() => {
-    const outlierData = computeOutlierData();
+    // Check if derived data cache is computed
+    if (!window.appState.derivedDataCache.computed) {
+      if (typeof window.computeAllDerivedData === 'function') {
+        window.computeAllDerivedData();
+      }
+    }
+
+    const records = window.appState.derivedDataCache.records || [];
+    const isCompactMode = window.appState.outlierCompactMode || false;
+    
+    // In compact mode, include all records. In full mode, only show records with outliers.
+    const outlierRecords = records
+      .filter(r => isCompactMode || (r.outliers && r.outliers.length > 0))
+      .map(r => ({
+        recordName: r.recordName,
+        outliers: r.outliers || []
+      }));
+
+    // Sort by number of outliers (most outliers first)
+    outlierRecords.sort((a, b) => b.outliers.length - a.outliers.length);
     
     el.innerHTML = '';
 
-    // Header
+    // Header with toggle
+    const headerContainer = document.createElement('div');
+    headerContainer.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;';
+    
+    const headerLeft = document.createElement('div');
     const header = document.createElement('div');
     header.className = 'outlier-data-header';
-    header.textContent = `Outlier Analysis (Top/Bottom 5%)`;
-    el.appendChild(header);
+    header.textContent = 'Outlier Analysis (Top/Bottom 5%)';
+    header.style.marginBottom = '4px';
+    
+    const description = document.createElement('div');
+    description.className = 'outlier-data-description';
+    description.textContent = 'Shows records in the top or bottom 5% for each metric.';
+    
+    headerLeft.appendChild(header);
+    headerLeft.appendChild(description);
+    
+    // Toggle button
+    const toggleContainer = document.createElement('div');
+    toggleContainer.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 11px; background: white; padding: 6px 10px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);';
+    
+    const toggleCheckbox = document.createElement('input');
+    toggleCheckbox.type = 'checkbox';
+    toggleCheckbox.id = 'outlier-compact-mode-checkbox';
+    toggleCheckbox.checked = isCompactMode;
+    toggleCheckbox.style.cssText = 'cursor: pointer;';
+    
+    const toggleLabel = document.createElement('label');
+    toggleLabel.htmlFor = 'outlier-compact-mode-checkbox';
+    toggleLabel.textContent = 'Compact';
+    toggleLabel.style.cssText = 'cursor: pointer; user-select: none; color: #475569; font-weight: 500;';
+    
+    toggleContainer.appendChild(toggleCheckbox);
+    toggleContainer.appendChild(toggleLabel);
+    
+    headerContainer.appendChild(headerLeft);
+    headerContainer.appendChild(toggleContainer);
+    el.appendChild(headerContainer);
+    
+    // Add event listener for toggle
+    toggleCheckbox.addEventListener('change', function() {
+      window.appState.outlierCompactMode = this.checked;
+      renderOutlierData(container);
+    });
 
-    if (outlierData.length === 0) {
+    if (outlierRecords.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'outlier-data-empty';
-      empty.textContent = 'No outliers found in the dataset.';
+      empty.textContent = 'No data available. Please load a dataset first.';
       el.appendChild(empty);
       return;
     }
@@ -135,7 +99,16 @@ function renderOutlierData(container) {
       ? window.formatMetricName 
       : (s) => s;
 
-    outlierData.forEach(({ recordName, outliers }) => {
+    // Create or get tooltip element for compact mode
+    let tooltip = document.getElementById('outlier-data-tooltip');
+    if (!tooltip) {
+      tooltip = document.createElement('div');
+      tooltip.id = 'outlier-data-tooltip';
+      tooltip.className = 'outlier-data-tooltip hidden';
+      document.body.appendChild(tooltip);
+    }
+
+    outlierRecords.forEach(({ recordName, outliers }) => {
       const row = document.createElement('div');
       row.className = 'outlier-data-row';
 
@@ -144,19 +117,52 @@ function renderOutlierData(container) {
       nameCol.className = 'outlier-data-name';
       nameCol.textContent = recordName;
 
-      // Right column: Outlier metrics
-      const metricsCol = document.createElement('div');
-      metricsCol.className = 'outlier-data-metrics';
+      if (isCompactMode) {
+        // Compact mode: show count
+        const countCol = document.createElement('div');
+        countCol.className = 'outlier-data-count';
+        countCol.textContent = outliers.length;
+        
+        // Add hover functionality to show tooltip (only if there are outliers)
+        if (outliers.length > 0) {
+          row.addEventListener('mouseenter', function(evt) {
+            // Build tooltip content
+            const tooltipLines = outliers.map(({ metric, percentile, position }) => {
+              return `<div class="outlier-tooltip-item outlier-${position}">${formatMetricName(metric)} ${percentile}%</div>`;
+            });
+            tooltip.innerHTML = tooltipLines.join('');
+            tooltip.classList.remove('hidden');
+          });
+          
+          row.addEventListener('mousemove', function(evt) {
+            // Position tooltip near cursor
+            tooltip.style.left = (evt.clientX + 15) + 'px';
+            tooltip.style.top = (evt.clientY + 15) + 'px';
+          });
+          
+          row.addEventListener('mouseleave', function() {
+            tooltip.classList.add('hidden');
+          });
+        }
+        
+        row.appendChild(nameCol);
+        row.appendChild(countCol);
+      } else {
+        // Full mode: show all outlier metrics
+        const metricsCol = document.createElement('div');
+        metricsCol.className = 'outlier-data-metrics';
 
-      outliers.forEach(({ metric, percentile, position }) => {
-        const line = document.createElement('div');
-        line.className = `outlier-data-metric-line outlier-${position}`;
-        line.textContent = `${formatMetricName(metric)} ${percentile}%`;
-        metricsCol.appendChild(line);
-      });
+        outliers.forEach(({ metric, percentile, position }) => {
+          const line = document.createElement('div');
+          line.className = `outlier-data-metric-line outlier-${position}`;
+          line.textContent = `${formatMetricName(metric)} ${percentile}%`;
+          metricsCol.appendChild(line);
+        });
 
-      row.appendChild(nameCol);
-      row.appendChild(metricsCol);
+        row.appendChild(nameCol);
+        row.appendChild(metricsCol);
+      }
+      
       list.appendChild(row);
     });
 
@@ -165,4 +171,3 @@ function renderOutlierData(container) {
 }
 
 window.renderOutlierData = renderOutlierData;
-window.computeOutlierData = computeOutlierData;

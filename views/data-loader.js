@@ -330,6 +330,9 @@ function processData() {
   // Reset outlier data computation flag when new dataset is loaded
   window.appState.outlierDataComputed = false;
   
+  // Reset derived data cache when dataset changes
+  window.appState.derivedDataCache = { computed: false, records: [] };
+  
   // Reset selection table when dataset changes
   window.appState.selectionModeLocations = [];
   window.appState.selectionModeActiveIndex = 0;
@@ -442,6 +445,9 @@ function processData() {
   if (typeof window.refreshEncodedColorDropdown === 'function') {
     window.refreshEncodedColorDropdown();
   }
+  if (typeof window.refreshTextEncodingDropdown === 'function') {
+    window.refreshTextEncodingDropdown();
+  }
   
   if (window.appState.selectedCountry) {
     window.calculatePercentiles(window.appState.selectedCountry);
@@ -507,6 +513,17 @@ function processData() {
   }
   if (typeof window.renderSelectionTable === 'function') {
     window.renderSelectionTable();
+  }
+  
+  // Refresh the three derived views (h-index, summation, outlier-data)
+  if (typeof window.renderHIndex === 'function') {
+    window.renderHIndex();
+  }
+  if (typeof window.renderSummation === 'function') {
+    window.renderSummation();
+  }
+  if (typeof window.renderOutlierData === 'function') {
+    window.renderOutlierData();
   }
 }
 

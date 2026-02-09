@@ -958,6 +958,34 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       return getSelectionModeColor(d.data.label) !== null;
     };
     
+    // Helper function to calculate text width
+    const getTextWidth = (text, fontSize = '8px', fontWeight = 'bold') => {
+      // Create a temporary text element to measure width
+      const tempText = svg.append('text')
+        .attr('font-size', fontSize)
+        .attr('font-weight', fontWeight)
+        .text(String(text || '?'))
+        .style('visibility', 'hidden');
+      const bbox = tempText.node().getBBox();
+      tempText.remove();
+      return bbox.width;
+    };
+    
+    // Pre-calculate text widths for all selected nodes (performance optimization)
+    const textWidthCache = new Map();
+    nodes.filter(n => isSelectedLocationText(n)).forEach(node => {
+      const textValue = String(node.data.textValue || '?');
+      if (!textWidthCache.has(textValue)) {
+        textWidthCache.set(textValue, getTextWidth(textValue));
+      }
+    });
+    
+    // Helper to get cached text width
+    const getCachedTextWidth = (textValue) => {
+      const text = String(textValue || '?');
+      return textWidthCache.get(text) || getTextWidth(text);
+    };
+    
     // Render background rectangles for selected item (behind text)
     const selectedRects = dataGroup.selectAll('rect.selected-bg')
       .data(nodes.filter(n => isSelectedLocationText(n)), d => d.data.label);
@@ -966,14 +994,19 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       .append('rect')
       .attr('class', 'selected-bg')
       .attr('x', d => {
+        const textWidth = getCachedTextWidth(d.data.textValue);
+        const halfWidth = (textWidth + 4) / 2; // 4px padding (2px each side)
         const prev = previousNodes.find(p => p.data && p.data.label === d.data.label);
-        return prev ? prev.x - 9 : d.x - 9;
+        return prev ? prev.x - halfWidth : d.x - halfWidth;
       })
       .attr('y', d => {
         const prev = previousNodes.find(p => p.data && p.data.label === d.data.label);
         return prev ? prev.y - 6 : d.y - 6;
       })
-      .attr('width', 18)
+      .attr('width', d => {
+        const textWidth = getCachedTextWidth(d.data.textValue);
+        return textWidth + 4; // 4px padding (2px each side)
+      })
       .attr('height', 12)
       .attr('fill', d => getDotColor(d))
       .attr('stroke', inSelectionMode ? 'none' : '#000000')
@@ -983,8 +1016,16 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       .transition()
       .duration(600)
       .ease(d3.easeQuadOut)
-      .attr('x', d => Math.max(plotPaddingLeft - 9, Math.min(width - plotPaddingRight - 9, d.x - 9)))
+      .attr('x', d => {
+        const textWidth = getCachedTextWidth(d.data.textValue);
+        const halfWidth = (textWidth + 4) / 2; // 4px padding (2px each side)
+        return Math.max(plotPaddingLeft - halfWidth, Math.min(width - plotPaddingRight - halfWidth, d.x - halfWidth));
+      })
       .attr('y', d => Math.max(plotPaddingTop - 6, Math.min(height - plotPaddingBottom - 6, d.y - 6)))
+      .attr('width', d => {
+        const textWidth = getCachedTextWidth(d.data.textValue);
+        return textWidth + 4; // 4px padding (2px each side)
+      })
       .attr('fill', d => getDotColor(d))
       .attr('stroke', inSelectionMode ? 'none' : '#000000')
       .attr('stroke-width', inSelectionMode ? 0 : 1);

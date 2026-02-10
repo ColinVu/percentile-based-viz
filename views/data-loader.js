@@ -248,7 +248,7 @@ function loadFallbackCountryData() {
 function loadFallbackCollegesData() {
   window.appState.jsonData = [
     {
-      "Name": "Harvard University",
+      "College": "Harvard University",
       "State": "Massachusetts",
       "Type": "Private",
       "Enrollment": 22947,
@@ -259,7 +259,7 @@ function loadFallbackCollegesData() {
       "MedianEarnings": 89700
     },
     {
-      "Name": "Stanford University",
+      "College": "Stanford University",
       "State": "California",
       "Type": "Private",
       "Enrollment": 17249,
@@ -270,7 +270,7 @@ function loadFallbackCollegesData() {
       "MedianEarnings": 94000
     },
     {
-      "Name": "MIT",
+      "College": "MIT",
       "State": "Massachusetts",
       "Type": "Private",
       "Enrollment": 11520,
@@ -281,7 +281,7 @@ function loadFallbackCollegesData() {
       "MedianEarnings": 104700
     },
     {
-      "Name": "University of California Berkeley",
+      "College": "University of California Berkeley",
       "State": "California",
       "Type": "Public",
       "Enrollment": 43204,
@@ -292,7 +292,7 @@ function loadFallbackCollegesData() {
       "MedianEarnings": 76200
     },
     {
-      "Name": "University of Texas Austin",
+      "College": "University of Texas Austin",
       "State": "Texas",
       "Type": "Public",
       "Enrollment": 52384,
@@ -337,7 +337,7 @@ function processData() {
   window.appState.selectionModeLocations = [];
   window.appState.selectionModeActiveIndex = 0;
   
-  // Detect schema: Country vs County/State
+  // Detect schema: Country/College vs County/State
   const firstRow = window.appState.jsonData && window.appState.jsonData.length > 0 ? window.appState.jsonData[0] : null;
   
   // Initialize SimilarityIndex for finding similar records
@@ -347,6 +347,7 @@ function processData() {
       const nominalCols = [];
       if (firstRow) {
         if (firstRow.Country) nominalCols.push('Country');
+        if (firstRow.College) nominalCols.push('College');
         if (firstRow.County) nominalCols.push('County');
         if (firstRow.State) nominalCols.push('State');
       }
@@ -372,16 +373,20 @@ function processData() {
   } else {
     // Auto-detect for built-in datasets
     const hasCountry = firstRow && Object.prototype.hasOwnProperty.call(firstRow, 'Country');
+    const hasCollege = firstRow && Object.prototype.hasOwnProperty.call(firstRow, 'College');
     const hasCountyState = firstRow && Object.prototype.hasOwnProperty.call(firstRow, 'County') && Object.prototype.hasOwnProperty.call(firstRow, 'State');
     
-    if (hasCountry) {
+    if (hasCollege) {
+      window.appState.geoMode = 'custom';
+      window.appState.dataColumn = 'College';
+    } else if (hasCountry) {
       window.appState.geoMode = 'country';
       window.appState.dataColumn = 'Country';
     } else if (hasCountyState) {
       window.appState.geoMode = 'county';
       window.appState.dataColumn = 'County';
     } else {
-      alert('Unsupported data format. Expect a "Country" column or "County" and "State" columns.');
+      alert('Unsupported data format. Expect a "Country", "College", or "County" and "State" columns.');
       return;
     }
   }

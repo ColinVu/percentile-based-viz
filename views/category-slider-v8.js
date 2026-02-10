@@ -202,7 +202,7 @@
       valueSelect.style.flex = '1';
       const optionEmpty = document.createElement('option');
       optionEmpty.value = '';
-      optionEmpty.textContent = 'Select value…';
+      optionEmpty.textContent = 'Select value...';
       valueSelect.appendChild(optionEmpty);
       const options = getNominalOptions(filter.column);
       options.forEach(val => {

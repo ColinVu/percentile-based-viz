@@ -31,7 +31,7 @@ function renderHIndex(container) {
     // Header
     const header = document.createElement('div');
     header.className = 'h-index-header';
-    header.textContent = 'H-Index Scores';
+    header.textContent = 'H-Index Scores (Experimental)';
     el.appendChild(header);
 
     // Description

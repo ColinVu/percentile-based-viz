@@ -31,7 +31,7 @@ function renderSummation(container) {
     // Header
     const header = document.createElement('div');
     header.className = 'summation-header';
-    header.textContent = 'Summation Scores';
+    header.textContent = 'Summation Scores (Experimental)';
     el.appendChild(header);
 
     // Description

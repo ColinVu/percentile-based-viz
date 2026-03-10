@@ -183,10 +183,19 @@
       <div class="header-dataset">
         <select id="dataset-select">
           <option value="country-development" selected>Country Development Indicators</option>
-          <option value="us-counties">US County Indicators</option>
+          <option value="us-counties">Georgia County Indicators</option>
           <option value="colleges">Colleges</option>
           <option value="custom">Custom Dataset</option>
         </select>
+        <a
+          id="dataset-download"
+          class="dataset-download-btn"
+          href="#"
+          download
+          aria-label="Download current dataset"
+        >
+          Download
+        </a>
         <div class="custom-upload" id="custom-upload" style="display: none;">
           <label for="file-input" class="file-upload">Upload</label>
           <input type="file" id="file-input" accept=".xlsx,.xls">
@@ -356,10 +365,74 @@
         filterSelectSection.style.display = 'block';
       }
       
-      // Load the default dataset (US Counties)
+      // Load the default dataset (Georgia Counties)
       console.log('[INIT] Loading default dataset...');
+      updateDatasetDownloadLink();
       window.loadSelectedDataset();
     });
+
+    function setDatasetDownloadDisabled(disabled) {
+      const link = document.getElementById('dataset-download');
+      if (!link) return;
+      if (disabled) {
+        link.classList.add('disabled');
+        link.setAttribute('aria-disabled', 'true');
+        link.setAttribute('tabindex', '-1');
+      } else {
+        link.classList.remove('disabled');
+        link.removeAttribute('aria-disabled');
+        link.removeAttribute('tabindex');
+      }
+    }
+
+    function updateDatasetDownloadLink() {
+      const datasetSelect = document.getElementById('dataset-select');
+      const link = document.getElementById('dataset-download');
+      if (!datasetSelect || !link) return;
+
+      const selected = datasetSelect.value;
+
+      // Clean up any prior object URL for custom downloads
+      if (window.__customDatasetObjectUrl) {
+        try { URL.revokeObjectURL(window.__customDatasetObjectUrl); } catch (e) {}
+        window.__customDatasetObjectUrl = null;
+      }
+
+      const builtIn = {
+        'country-development': { href: 'CountryDevelopmentIndicators_withcode.xlsx', filename: 'CountryDevelopmentIndicators_withcode.xlsx' },
+        'us-counties': { href: 'georgia-county-indicators.xlsx', filename: 'georgia-county-indicators.xlsx' },
+        'colleges': { href: 'colleges.xlsx', filename: 'colleges.xlsx' }
+      };
+
+      if (selected === 'custom') {
+        const fileInput = document.getElementById('file-input');
+        const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+        if (!file) {
+          link.href = '#';
+          link.removeAttribute('download');
+          setDatasetDownloadDisabled(true);
+          return;
+        }
+        const objectUrl = URL.createObjectURL(file);
+        window.__customDatasetObjectUrl = objectUrl;
+        link.href = objectUrl;
+        link.setAttribute('download', file.name || 'dataset.xlsx');
+        setDatasetDownloadDisabled(false);
+        return;
+      }
+
+      const info = builtIn[selected];
+      if (!info) {
+        link.href = '#';
+        link.removeAttribute('download');
+        setDatasetDownloadDisabled(true);
+        return;
+      }
+
+      link.href = info.href;
+      link.setAttribute('download', info.filename);
+      setDatasetDownloadDisabled(false);
+    }
     
     // Function to populate state dropdown from dataset
     function populateStateDropdown() {
@@ -1472,6 +1545,8 @@
           if (customUpload) {
             customUpload.style.display = isCustom ? 'flex' : 'none';
           }
+
+          updateDatasetDownloadLink();
           
           if (isCustom) {
             return;
@@ -1505,6 +1580,9 @@
         
         // Show loading indicator
         document.querySelector('.loading').style.display = 'flex';
+
+        // Update dataset download button to point at the selected custom file
+        updateDatasetDownloadLink();
         
         // Read the file
         const reader = new FileReader();

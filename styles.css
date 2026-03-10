@@ -564,6 +564,31 @@ h1 {
   background-color: #fff;
 }
 
+.dataset-download-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #d4d4d8;
+  background: #fff;
+  color: var(--color-text-heading);
+  font-size: var(--font-size-base);
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.dataset-download-btn:hover {
+  background: #f4f4f5;
+}
+
+.dataset-download-btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .header .custom-upload {
   display: none;
   padding: 6px 8px;

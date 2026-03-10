@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Data loading and processing
  * Handles loading datasets and processing data
  */
@@ -29,10 +29,10 @@ async function loadSelectedDataset() {
   }
 }
 
-// Load US County indicators dataset
+// Load Georgia County indicators dataset
 async function loadUSCountyData() {
   try {
-    const response = await fetch('us-county-indicators.xlsx');
+    const response = await fetch('georgia-county-indicators.xlsx');
     const arrayBuffer = await response.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, { type: 'array' });
@@ -47,7 +47,7 @@ async function loadUSCountyData() {
     window.appState.selectedDataColumn = null;
     processData();
   } catch (error) {
-    console.error('Error loading US County data:', error);
+    console.error('Error loading Georgia County data:', error);
     // Fallback to sample county data
     loadFallbackCountyData();
   }
@@ -160,7 +160,7 @@ function loadFallbackCountyData() {
       "HealthcareAccess": 89.7
     }
   ];
-  console.log('Using fallback US County data due to CORS restrictions');
+  console.log('Using fallback Georgia County data due to CORS restrictions');
   // Only show CORS info if running locally (file:// protocol)
   if (window.location.protocol === 'file:') {
     showCorsInfo();

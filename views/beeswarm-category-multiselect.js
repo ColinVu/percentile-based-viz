@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Beeswarm chart for Category Slider (Multi-Select)
  * Supports multi-selection with shift-click and selection box syncing
  */
@@ -72,7 +72,7 @@ function renderBeeswarmCategoryMultiSelect(metricKey) {
   const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
   const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
   const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
-  axisG.selectAll('text').style('font-size', '10px');
+  axisG.selectAll('text').style('font-size', FONTS.size.xs + 'px');
 
   for (let p = 10; p < 100; p += 10) {
     const qVal = d3.quantileSorted(sortedVals, p / 100);
@@ -90,7 +90,7 @@ function renderBeeswarmCategoryMultiSelect(metricKey) {
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .text(`${p}%`);
     }
   }
@@ -111,7 +111,7 @@ function renderBeeswarmCategoryMultiSelect(metricKey) {
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .text(`${P}%`);
     }
   });
@@ -145,7 +145,7 @@ function renderBeeswarmCategoryMultiSelect(metricKey) {
   const primary = window.appState.selectedCountry;
 
   const primaryColor = '#ef4444';
-  const secondaryColor = '#2563eb';
+  const secondaryColor = '#4f46e5';
   const defaultColor = '#9b59b6';
 
   const previousNodes = Array.isArray(window.appState.previousBeeswarmNodes)
@@ -308,7 +308,7 @@ function renderBeeswarmCategoryMultiSelect(metricKey) {
         hoverLabel.style.border = 'none';
         hoverLabel.style.padding = '0';
         hoverLabel.style.borderRadius = '0';
-        hoverLabel.style.fontWeight = 'normal';
+        hoverLabel.style.fontWeight = FONTS.weight.normal;
       }
     })
     .on('mousemove', function(evt) {
@@ -342,8 +342,8 @@ function renderBeeswarmCategoryMultiSelect(metricKey) {
     .attr('x', plotPaddingLeft + 6)
     .attr('y', 18)
     .attr('fill', '#2c3e50')
-    .attr('font-size', 14)
-    .attr('font-weight', 'bold')
+    .attr('font-size', FONTS.size.base)
+    .attr('font-weight', FONTS.weight.bold)
     .text(window.formatMetricName(metricKey));
 }
 

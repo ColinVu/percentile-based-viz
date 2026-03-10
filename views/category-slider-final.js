@@ -47,7 +47,7 @@ function renderCategoryMetricListFinal() {
 
   // Create checkbox toggle in bottom right corner
   const checkboxContainer = document.createElement('div');
-  checkboxContainer.style.cssText = 'position: absolute; bottom: 10px; right: 10px; display: flex; align-items: center; gap: 6px; font-size: 12px; z-index: 100; background: white; padding: 6px 10px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);';
+  checkboxContainer.style.cssText = 'position: absolute; bottom: 10px; right: 10px; display: flex; align-items: center; gap: 6px; font-size: var(--font-size-md); z-index: 100; background: white; padding: 6px 10px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);';
   
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
@@ -58,14 +58,14 @@ function renderCategoryMetricListFinal() {
   const checkboxLabel = document.createElement('label');
   checkboxLabel.htmlFor = 'distributed-mode-checkbox';
   checkboxLabel.textContent = 'Distributed';
-  checkboxLabel.style.cssText = 'cursor: pointer; user-select: none; color: #475569;';
+  checkboxLabel.style.cssText = 'cursor: pointer; user-select: none; color: var(--color-text-medium);';
   
   checkboxContainer.appendChild(checkbox);
   checkboxContainer.appendChild(checkboxLabel);
 
   // Add header row (fixed position at top)
   const headerRow = document.createElement('div');
-  headerRow.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; padding: 6px 8px; font-weight: bold; font-size: 10px; color: #475569; border-bottom: 1px solid #e2e8f0; background: #f8fafc; z-index: 10;';
+  headerRow.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; padding: 6px 8px; font-weight: var(--font-weight-bold); font-size: var(--font-size-xs); color: var(--color-text-medium); border-bottom: 1px solid #e2e8f0; background: #f8fafc; z-index: 10;';
   
   const metricHeader = document.createElement('span');
   const metricLabel = window.appState.selectedCountry
@@ -90,7 +90,7 @@ function renderCategoryMetricListFinal() {
     metricName.textContent = window.formatMetricName(key);
 
     const percentileSpan = document.createElement('span');
-    percentileSpan.style.cssText = 'float: right; font-weight: bold; color: #000000;';
+    percentileSpan.style.cssText = 'float: right; font-weight: var(--font-weight-bold); color: var(--color-text-black);';
     percentileSpan.textContent = pct >= 0 ? `${pct}%` : '';
 
     item.appendChild(metricName);
@@ -121,7 +121,7 @@ function renderCategoryMetricListFinal() {
     // const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
     // const gradient = window.createPercentileGradient(percentiles);
     // track.style.background = gradient;
-    track.style.background = '#cbd5e1';
+    track.style.background = 'linear-gradient(to bottom, #c7d2fe, #e0e7ff)';
   }
 
   // Function to apply distributed/percentile-based positioning (like original category-slider.js)
@@ -185,7 +185,7 @@ function renderCategoryMetricListFinal() {
     });
 
     // Remove gradient for distributed mode
-    track.style.background = '#cbd5e1';
+    track.style.background = 'linear-gradient(to bottom, #c7d2fe, #e0e7ff)';
   }
 
   requestAnimationFrame(() => {
@@ -368,7 +368,7 @@ function renderCategoryMetricListFinal() {
           data.node.style.top = (data.actualPosition + headerPadding) + 'px';
         });
 
-        track.style.background = '#cbd5e1';
+        track.style.background = 'linear-gradient(to bottom, #c7d2fe, #e0e7ff)';
       } else {
         // Even spacing mode
         const labelCount = labelNodes.length;
@@ -386,7 +386,7 @@ function renderCategoryMetricListFinal() {
         // const percentiles = labelNodes.map(node => parseFloat(node.dataset.percentile) || 0);
         // const gradient = window.createPercentileGradient(percentiles);
         // track.style.background = gradient;
-        track.style.background = '#cbd5e1';
+        track.style.background = 'linear-gradient(to bottom, #c7d2fe, #e0e7ff)';
       }
 
       computeSnapPoints();

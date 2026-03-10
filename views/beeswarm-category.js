@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Beeswarm chart rendering for category sliders
  * Shared across Category Slider, V2, V3 views
  */
@@ -67,7 +67,7 @@ function renderBeeswarmCategory(metricKey) {
   const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
   const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
   const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
-  axisG.selectAll('text').style('font-size', '10px');
+  axisG.selectAll('text').style('font-size', FONTS.size.xs + 'px');
 
   // Horizontal guides at deciles
   for (let p = 10; p < 100; p += 10) {
@@ -87,7 +87,7 @@ function renderBeeswarmCategory(metricKey) {
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .text(`${p}%`);
     }
   }
@@ -112,7 +112,7 @@ function renderBeeswarmCategory(metricKey) {
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .text(`${P}%`);
     }
   });
@@ -267,7 +267,7 @@ function renderBeeswarmCategory(metricKey) {
       hoverLabel.style.border = 'none';
       hoverLabel.style.padding = '0';
       hoverLabel.style.borderRadius = '0';
-      hoverLabel.style.fontWeight = 'normal';
+      hoverLabel.style.fontWeight = FONTS.weight.normal;
     })
     .on('mousemove', function(evt) {
       const [, my] = d3.pointer(evt);
@@ -290,8 +290,8 @@ function renderBeeswarmCategory(metricKey) {
     .attr('x', plotPaddingLeft + 6)
     .attr('y', 18)
     .attr('fill', '#2c3e50')
-    .attr('font-size', 14)
-    .attr('font-weight', 'bold')
+    .attr('font-size', FONTS.size.base)
+    .attr('font-weight', FONTS.weight.bold)
     .text(window.formatMetricName(metricKey));
 }
 

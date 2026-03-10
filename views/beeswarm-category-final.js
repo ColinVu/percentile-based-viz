@@ -49,7 +49,7 @@ function highlightBeeswarmElement(label, highlight) {
                .attr('data-original-stroke', textEl.attr('stroke'))
                .attr('data-original-stroke-width', textEl.attr('stroke-width'))
                .attr('fill', '#93c5fd')
-               .attr('stroke', '#3b82f6')
+               .attr('stroke', '#6366f1')
                .attr('stroke-width', 2);
         } else {
           textEl.attr('fill', textEl.attr('data-original-fill') || '#000000')
@@ -68,10 +68,10 @@ function highlightBeeswarmElement(label, highlight) {
                 .attr('data-original-stroke', circle.attr('stroke'))
                 .attr('data-original-stroke-width', circle.attr('stroke-width'))
                 .attr('fill', '#93c5fd')
-                .attr('stroke', '#3b82f6')
+                .attr('stroke', '#6366f1')
                 .attr('stroke-width', 3);
         } else {
-          circle.attr('fill', circle.attr('data-original-fill') || '#3498db')
+          circle.attr('fill', circle.attr('data-original-fill') || '#4f46e5')
                 .attr('stroke', circle.attr('data-original-stroke') || '#ffffff')
                 .attr('stroke-width', circle.attr('data-original-stroke-width') || 1);
         }
@@ -192,10 +192,10 @@ function showColorInputBox(evt, originalColor, displayColor, onColorApplied, rec
   const colorLabel = document.createElement('div');
   colorLabel.textContent = 'Color:';
   colorLabel.style.cssText = `
-    font-size: 10px;
-    color: #64748b;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
     margin-bottom: 4px;
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
   `;
   
   const input = document.createElement('input');
@@ -205,8 +205,8 @@ function showColorInputBox(evt, originalColor, displayColor, onColorApplied, rec
   input.style.cssText = `
     width: 80px;
     padding: 4px 8px;
-    font-size: 12px;
-    font-family: monospace;
+    font-size: var(--font-size-md);
+    font-family: var(--font-family-mono);
     border: 1px solid #e2e8f0;
     border-radius: 3px;
     outline: none;
@@ -246,7 +246,7 @@ function showColorInputBox(evt, originalColor, displayColor, onColorApplied, rec
           // Add similar records section
           const similarHeader = document.createElement('div');
           similarHeader.textContent = 'Similar regions:';
-          similarHeader.style.cssText = 'font-size: 11px; font-weight: bold; color: #475569; margin-bottom: 4px;';
+          similarHeader.style.cssText = 'font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); color: var(--color-text-medium); margin-bottom: 4px;';
           inputContainer.appendChild(similarHeader);
           
           similarRecords.forEach((similar, idx) => {
@@ -263,13 +263,13 @@ function showColorInputBox(evt, originalColor, displayColor, onColorApplied, rec
             }
             
             similarDiv.textContent = similarLabel;
-            similarDiv.style.cssText = 'font-size: 11px; color: #64748b; padding: 3px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; border-radius: 2px; transition: background-color 0.15s;';
+            similarDiv.style.cssText = 'font-size: var(--font-size-sm); color: var(--color-text-muted); padding: 3px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; border-radius: 2px; transition: background-color 0.15s;';
             similarDiv.dataset.label = similarLabel;
             
             // Hover effect for the div itself
             similarDiv.addEventListener('mouseenter', function() {
               this.style.backgroundColor = '#f1f5f9';
-              this.style.color = '#1e293b';
+              this.style.color = 'var(--color-text-dark)';
               
               // Highlight the corresponding element in the beeswarm
               highlightBeeswarmElement(similarLabel, true);
@@ -277,7 +277,7 @@ function showColorInputBox(evt, originalColor, displayColor, onColorApplied, rec
             
             similarDiv.addEventListener('mouseleave', function() {
               this.style.backgroundColor = 'transparent';
-              this.style.color = '#64748b';
+              this.style.color = 'var(--color-text-muted)';
               
               // Remove highlight from the beeswarm
               highlightBeeswarmElement(similarLabel, false);
@@ -363,7 +363,7 @@ function ensureFinalViewBeeswarmCheckbox() {
   // Create checkbox container
   const checkboxContainer = document.createElement('div');
   checkboxContainer.id = 'box-plot-mode-checkbox-container';
-  checkboxContainer.style.cssText = 'position: absolute; bottom: 10px; right: 10px; display: flex; align-items: center; gap: 6px; font-size: 12px; z-index: 100; background: white; padding: 6px 10px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);';
+  checkboxContainer.style.cssText = 'position: absolute; bottom: 10px; right: 10px; display: flex; align-items: center; gap: 6px; font-size: var(--font-size-md); z-index: 100; background: white; padding: 6px 10px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);';
   
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
@@ -374,7 +374,7 @@ function ensureFinalViewBeeswarmCheckbox() {
   const checkboxLabel = document.createElement('label');
   checkboxLabel.htmlFor = 'box-plot-mode-checkbox';
   checkboxLabel.textContent = 'Box Plot';
-  checkboxLabel.style.cssText = 'cursor: pointer; user-select: none; color: #475569;';
+  checkboxLabel.style.cssText = 'cursor: pointer; user-select: none; color: var(--color-text-medium);';
   
   checkboxContainer.appendChild(checkbox);
   checkboxContainer.appendChild(checkboxLabel);
@@ -399,7 +399,7 @@ function ensureFinalViewBeeswarmCheckbox() {
   if (!existingMapToggle && (hasLatLong || hasFIPS || hasCountryCode)) {
     const mapToggle = document.createElement('div');
     mapToggle.id = 'map-toggle-button';
-    mapToggle.style.cssText = 'position: absolute; bottom: 50px; right: 10px; display: flex; align-items: center; gap: 6px; font-size: 12px; z-index: 100; background: white; padding: 6px 10px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: pointer;';
+    mapToggle.style.cssText = 'position: absolute; bottom: 50px; right: 10px; display: flex; align-items: center; gap: 6px; font-size: var(--font-size-md); z-index: 100; background: white; padding: 6px 10px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: pointer;';
     
     const mapCheckbox = document.createElement('input');
     mapCheckbox.type = 'checkbox';
@@ -410,7 +410,7 @@ function ensureFinalViewBeeswarmCheckbox() {
     const mapLabel = document.createElement('label');
     mapLabel.htmlFor = 'map-mode-checkbox';
     mapLabel.textContent = 'Map';
-    mapLabel.style.cssText = 'cursor: pointer; user-select: none; color: #475569;';
+    mapLabel.style.cssText = 'cursor: pointer; user-select: none; color: var(--color-text-medium);';
     
     mapToggle.appendChild(mapCheckbox);
     mapToggle.appendChild(mapLabel);
@@ -505,13 +505,13 @@ function renderBoxPlotCategoryFinal(metricKey) {
     .attr('width', (width - plotPaddingRight) - plotPaddingLeft)
     .attr('height', (height - plotPaddingBottom) - plotPaddingTop)
     .attr('fill', 'none')
-    .attr('stroke', '#cbd5e1')
+    .attr('stroke', '#e0e7ff')
     .attr('stroke-width', 1);
 
   const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
   const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
   const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
-  axisG.selectAll('text').style('font-size', '10px').style('user-select', 'none');
+  axisG.selectAll('text').style('font-size', FONTS.size.xs + 'px').style('user-select', 'none');
 
   // Compute quartiles and whiskers
   const q1 = d3.quantileSorted(sortedVals, 0.25);
@@ -529,7 +529,7 @@ function renderBoxPlotCategoryFinal(metricKey) {
     .attr('x2', xCenter)
     .attr('y1', y(lowerWhiskerVal))
     .attr('y2', y(upperWhiskerVal))
-    .attr('stroke', '#94a3b8')
+    .attr('stroke', '#a5b4fc')
     .attr('stroke-width', 1.5);
 
   // Box (Q1 to Q3)
@@ -540,8 +540,8 @@ function renderBoxPlotCategoryFinal(metricKey) {
     .attr('height', Math.max(1, y(q1) - y(q3)))
     .attr('rx', 6)
     .attr('ry', 6)
-    .attr('fill', '#e6f2fb')
-    .attr('stroke', '#94a3b8')
+    .attr('fill', '#eef2ff')
+    .attr('stroke', '#a5b4fc')
     .attr('stroke-width', 1.5);
 
   // Median line
@@ -550,8 +550,8 @@ function renderBoxPlotCategoryFinal(metricKey) {
     .attr('x2', xCenter + boxWidth / 2)
     .attr('y1', y(median))
     .attr('y2', y(median))
-    .attr('stroke', '#334155')
-    .attr('stroke-width', 1.5);
+    .attr('stroke', '#4f46e5')
+    .attr('stroke-width', 2);
 
   // Whisker caps
   svg.append('line')
@@ -559,14 +559,14 @@ function renderBoxPlotCategoryFinal(metricKey) {
     .attr('x2', xCenter + boxWidth / 4)
     .attr('y1', y(lowerWhiskerVal))
     .attr('y2', y(lowerWhiskerVal))
-    .attr('stroke', '#94a3b8')
+    .attr('stroke', '#a5b4fc')
     .attr('stroke-width', 1.5);
   svg.append('line')
     .attr('x1', xCenter - boxWidth / 4)
     .attr('x2', xCenter + boxWidth / 4)
     .attr('y1', y(upperWhiskerVal))
     .attr('y2', y(upperWhiskerVal))
-    .attr('stroke', '#94a3b8')
+    .attr('stroke', '#a5b4fc')
     .attr('stroke-width', 1.5);
 
   // Highlight current selection position on the plot
@@ -593,9 +593,9 @@ function renderBoxPlotCategoryFinal(metricKey) {
   svg.append('text')
     .attr('x', plotPaddingLeft + 6)
     .attr('y', 18)
-    .attr('fill', '#2c3e50')
-    .attr('font-size', 14)
-    .attr('font-weight', 'bold')
+    .attr('fill', '#4f46e5')
+    .attr('font-size', FONTS.size.base)
+    .attr('font-weight', FONTS.weight.bold)
     .style('user-select', 'none')
     .text(window.formatMetricName(metricKey));
 
@@ -604,7 +604,7 @@ function renderBoxPlotCategoryFinal(metricKey) {
     .attr('class', 'hover-line')
     .attr('x1', plotPaddingLeft)
     .attr('x2', width - plotPaddingRight)
-    .attr('stroke', '#9aa5b1')
+    .attr('stroke', '#a5b4fc')
     .attr('stroke-dasharray', '4 4')
     .style('display', 'none');
 
@@ -838,7 +838,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       }
       if (categories.length === 1 && (!hasEncodingField || !encodingField)) {
         // No color encoding - use blue
-        return '#3498db';
+        return '#4f46e5';
       } else if (categories.length === 1) {
         return d3.interpolateRainbow(0.35);
       }
@@ -879,7 +879,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
   const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
   const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
-  axisG.selectAll('text').style('font-size', '10px').style('user-select', 'none');
+  axisG.selectAll('text').style('font-size', FONTS.size.xs + 'px').style('user-select', 'none');
 
   for (let p = 10; p < 100; p += 10) {
     const qVal = d3.quantileSorted(sortedVals, p / 100);
@@ -897,7 +897,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .style('user-select', 'none')
         .text(`${p}%`);
     }
@@ -919,7 +919,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .style('user-select', 'none')
         .text(`${P}%`);
     }
@@ -1048,8 +1048,8 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       })
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
-      .attr('font-size', '8px')
-      .attr('font-weight', 'bold')
+      .attr('font-size', FONTS.size.tiny)
+      .attr('font-weight', FONTS.weight.bold)
       .attr('fill', d => isSelectedLocationText(d) ? '#ffffff' : getDotColor(d))
       .attr('opacity', d => inSelectionMode && !isSelectedLocationText(d) ? 0.5 : 1)
       .attr('pointer-events', 'all')
@@ -1070,7 +1070,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       .attr('y', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
       .attr('fill', d => isSelectedLocationText(d) ? '#ffffff' : getDotColor(d))
       .attr('opacity', d => inSelectionMode && !isSelectedLocationText(d) ? 0.5 : 1)
-      .attr('font-weight', 'bold');
+      .attr('font-weight', FONTS.weight.bold);
     
     // Update data-original-color for all texts
     allTexts.each(function(d) {
@@ -1105,7 +1105,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
         d3.select(this)
           .attr('stroke', '#d35400')
           .attr('stroke-width', 1.5)
-          .attr('font-size', '10px');
+          .attr('font-size', FONTS.size.xs);
       })
       .on('mousemove', function(evt) {
         // Smart positioning: if tooltip would be hidden by header (first ~80px), show it below cursor instead
@@ -1196,7 +1196,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
         tooltip.classed('hidden', true);
         d3.select(this)
           .attr('stroke', 'none')
-          .attr('font-size', '8px');
+          .attr('font-size', FONTS.size.tiny);
       })
       .on('contextmenu', function(evt, d) {
         const originalColor = d3.select(this).attr('data-original-color');
@@ -1442,7 +1442,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       hoverLabel.style.border = 'none';
       hoverLabel.style.padding = '0';
       hoverLabel.style.borderRadius = '0';
-      hoverLabel.style.fontWeight = 'normal';
+      hoverLabel.style.fontWeight = FONTS.weight.normal;
       hoverLabel.style.userSelect = 'none';
     })
     .on('mousemove', function(evt) {
@@ -1473,8 +1473,8 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       .attr('x', legendX)
       .attr('y', legendY - 18)
       .attr('fill', '#1f2937')
-      .attr('font-size', 12)
-      .attr('font-weight', 'bold')
+      .attr('font-size', FONTS.size.md)
+      .attr('font-weight', FONTS.weight.bold)
       .text(`Color: ${encodingLabel}`);
 
     legendCategories.forEach((cat, idx) => {
@@ -1505,7 +1505,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
         .attr('x', legendX + 16)
         .attr('y', 0)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .attr('dominant-baseline', 'middle')
         .text(cat);
     });
@@ -1515,7 +1515,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
         .attr('x', legendX)
         .attr('y', legendY + maxLegendItems * 16)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .text(`(+${categories.length - maxLegendItems} more)`);
     }
   }
@@ -1523,9 +1523,9 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   svg.append('text')
     .attr('x', plotPaddingLeft + 6)
     .attr('y', 18)
-    .attr('fill', '#2c3e50')
-    .attr('font-size', 14)
-    .attr('font-weight', 'bold')
+    .attr('fill', '#4f46e5')
+    .attr('font-size', FONTS.size.base)
+    .attr('font-weight', FONTS.weight.bold)
     .style('user-select', 'none')
     .text(window.formatMetricName(metricKey));
   

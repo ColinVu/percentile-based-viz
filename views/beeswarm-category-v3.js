@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Beeswarm chart rendering for Category Slider (Country Detailed)
  * Uses country codes as text labels with optional continent colors
  */
@@ -77,7 +77,7 @@ function renderBeeswarmCategoryV3(metricKey) {
   const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
   const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
   const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
-  axisG.selectAll('text').style('font-size', '10px');
+  axisG.selectAll('text').style('font-size', FONTS.size.xs + 'px');
 
   // Horizontal guides at deciles
   for (let p = 10; p < 100; p += 10) {
@@ -97,7 +97,7 @@ function renderBeeswarmCategoryV3(metricKey) {
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .text(`${p}%`);
     }
   }
@@ -122,7 +122,7 @@ function renderBeeswarmCategoryV3(metricKey) {
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .text(`${P}%`);
     }
   });
@@ -218,8 +218,8 @@ function renderBeeswarmCategoryV3(metricKey) {
       })
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
-      .attr('font-size', '8px')
-      .attr('font-weight', 'bold')
+      .attr('font-size', FONTS.size.tiny)
+      .attr('font-weight', FONTS.weight.bold)
       .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#ffffff' : '#9b59b6'))
       .attr('pointer-events', 'all') // Text handles all mouse events
       .text(d => d.data.countryCode || '?');
@@ -242,7 +242,7 @@ function renderBeeswarmCategoryV3(metricKey) {
         }
         return hasContinent ? continentColor(d.data.continent) : '#9b59b6';
       })
-      .attr('font-weight', 'bold');
+      .attr('font-weight', FONTS.weight.bold);
 
     // Store current positions for next transition
     window.appState.previousBeeswarmNodes = nodes.map(n => ({ ...n }));
@@ -259,7 +259,7 @@ function renderBeeswarmCategoryV3(metricKey) {
           .attr('stroke', '#d35400')
           .attr('stroke-width', 1.5)
           .attr('fill', d => hasContinent ? continentColor(d.data.continent) : (d.data.label === window.appState.selectedCountry ? '#d4ac0d' : '#8e44ad'))
-          .attr('font-size', '10px');
+          .attr('font-size', FONTS.size.xs);
       })
       .on('mousemove', function(evt) {
         tooltip
@@ -299,8 +299,8 @@ function renderBeeswarmCategoryV3(metricKey) {
             }
             return hasContinent ? continentColor(d.data.continent) : '#9b59b6';
           })
-          .attr('font-size', '8px')
-          .attr('font-weight', 'bold');
+          .attr('font-size', FONTS.size.tiny)
+          .attr('font-weight', FONTS.weight.bold);
       });
 
   } else {
@@ -413,7 +413,7 @@ function renderBeeswarmCategoryV3(metricKey) {
       hoverLabel.style.border = 'none';
       hoverLabel.style.padding = '0';
       hoverLabel.style.borderRadius = '0';
-      hoverLabel.style.fontWeight = 'normal';
+      hoverLabel.style.fontWeight = FONTS.weight.normal;
     })
     .on('mousemove', function(evt) {
       const [, my] = d3.pointer(evt);
@@ -458,7 +458,7 @@ function renderBeeswarmCategoryV3(metricKey) {
           .attr('x', legendX + 14)
           .attr('y', legendY + i * 16)
           .attr('fill', '#475569')
-          .attr('font-size', 10)
+          .attr('font-size', FONTS.size.xs)
           .text(c);
       });
   }
@@ -467,8 +467,8 @@ function renderBeeswarmCategoryV3(metricKey) {
     .attr('x', plotPaddingLeft + 6)
     .attr('y', 18)
     .attr('fill', '#2c3e50')
-    .attr('font-size', 14)
-    .attr('font-weight', 'bold')
+    .attr('font-size', FONTS.size.base)
+    .attr('font-weight', FONTS.weight.bold)
     .text(window.formatMetricName(metricKey));
 }
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Percentile Scroll View
  * The main scrolling percentile view
  */
@@ -196,7 +196,7 @@ function populateAllInlineMetrics() {
     inlineContainer.innerHTML = '';
     
     if (closestMetrics.length === 0) {
-      inlineContainer.innerHTML = '<div class="no-inline-metrics">—</div>';
+      inlineContainer.innerHTML = '<div class="no-inline-metrics">â€”</div>';
       continue;
     }
     

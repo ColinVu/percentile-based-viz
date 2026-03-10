@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Map Panel for Final View
  * Displays US counties map colored by selection colors
  */
@@ -454,7 +454,7 @@ async function renderLatLongMap(svgElement, width, height) {
       .domain(categories)
       .range(categories.map((_, idx) => {
         if (categories.length === 1 && (!hasEncodingField || !encodingField)) {
-          return '#3498db';
+          return '#4f46e5';
         } else if (categories.length === 1) {
           return d3.interpolateRainbow(0.35);
         }
@@ -887,7 +887,7 @@ async function renderMapPanel() {
       .attr('y', height / 2)
       .attr('text-anchor', 'middle')
       .attr('fill', '#64748b')
-      .attr('font-size', 14)
+      .attr('font-size', FONTS.size.base)
       .text('No geographic columns found in dataset');
     return;
   }

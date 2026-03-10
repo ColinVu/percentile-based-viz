@@ -1,7 +1,7 @@
-/**
+﻿/**
  * Summation index view
  * Displays all records with their Summation scores in a 2-column layout.
- * The summation score is calculated by summing (k × percentage of variables in each k-band),
+ * The summation score is calculated by summing (k Ã— percentage of variables in each k-band),
  * where k represents the distance from the median (50th percentile).
  */
 
@@ -72,7 +72,7 @@ function renderSummation(container) {
       // Right column: Score
       const scoreCol = document.createElement('div');
       scoreCol.className = 'summation-score';
-      scoreCol.textContent = summationScore !== null ? summationScore.toFixed(2) : '—';
+      scoreCol.textContent = summationScore !== null ? summationScore.toFixed(2) : 'â€”';
 
       row.appendChild(nameCol);
       row.appendChild(scoreCol);

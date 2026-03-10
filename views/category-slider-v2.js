@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Category Slider (Color ramp)
  * Shows metrics with evenly spaced labels (not percentile-based positioning)
  */
@@ -44,7 +44,7 @@ function renderCategoryMetricListV2() {
     metricName.textContent = window.formatMetricName(key);
     
     const percentileSpan = document.createElement('span');
-    percentileSpan.style.cssText = 'float: right; font-weight: bold; color: #000000;';
+    percentileSpan.style.cssText = 'float: right; font-weight: var(--font-weight-bold); color: var(--color-text-black);';
     percentileSpan.textContent = pct >= 0 ? `${pct}%` : '';
     
     item.appendChild(metricName);

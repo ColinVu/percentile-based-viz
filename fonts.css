@@ -1,0 +1,217 @@
+/*
+ * ============================================================
+ *  FONTS.CSS — Central font configuration
+ *  Edit this file to update fonts across the entire app.
+ *  Includes: font family, size, weight, style, and text color.
+ *
+ *  NOTE: Dynamic/variable colors (computed at runtime) are
+ *  intentionally NOT defined here — only static text colors.
+ * ============================================================
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* =========================================================
+   * FONT FAMILIES
+   * ========================================================= */
+  --font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-family-code: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  --font-family-mono: 'JetBrains Mono', Consolas, monospace;
+
+  /* =========================================================
+   * FONT SIZES
+   * All values in px. Used in both CSS (via var()) and JS
+   * (read via fonts.js for D3 .attr() calls).
+   * ========================================================= */
+  --font-size-tiny:    8px;   /* Tiny chart labels (e.g. pie slices) */
+  --font-size-xs:      10px;  /* Axis text, small labels, sidebar tabs */
+  --font-size-sm:      11px;  /* Small text, category labels, filter inputs */
+  --font-size-md:      12px;  /* Body text, chips, rows, descriptions */
+  --font-size-body:    13px;  /* Medium body text */
+  --font-size-base:    14px;  /* Base text, inputs, chart titles */
+  --font-size-medium:  15px;  /* Pane/panel headers */
+  --font-size-lg:      16px;  /* Section headers, select elements */
+  --font-size-xl:      18px;  /* XL text, modal headers, loading */
+  --font-size-2xl:     20px;  /* Sidebar headers, scroll icon */
+  --font-size-3xl:     24px;  /* Icon buttons (close/collapse) */
+  --font-size-4xl:     30px;  /* Page h1 */
+  --font-size-5xl:     36px;  /* Percentile label */
+  --font-size-display: 50px;  /* Hero/display numbers, country name */
+
+  /* =========================================================
+   * FONT WEIGHTS
+   * ========================================================= */
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  /* =========================================================
+   * FONT STYLE
+   * ========================================================= */
+  --font-style-italic: italic;
+
+  /* =========================================================
+   * TEXT COLORS — Sleek Professional Gray Scale
+   *
+   * Core scale (light → dark)
+   * ========================================================= */
+  --color-text-white:        #ffffff;  /* Text on dark backgrounds */
+  --color-text-faint:        #d4d4d8;  /* Very light — no-metrics placeholder */
+  --color-text-note:         #a1a1aa;  /* Note/annotation text */
+  --color-text-subtle:       #a1a1aa;  /* Empty states, disabled placeholders */
+  --color-text-lighter:      #71717a;  /* Close buttons, file names, side notes */
+  --color-text-muted:        #71717a;  /* Descriptions, loading states, muted tabs */
+  --color-text-medium:       #52525b;  /* Secondary info, metrics */
+  --color-text-instructions: #52525b;  /* Instructions block */
+  --color-text-body:         #3f3f46;  /* Base body text */
+  --color-text-subheading:   #3f3f46;  /* Name cells, list items */
+  --color-text-dark:         #27272a;  /* Scores, inputs, selected states */
+  --color-text-heading:      #18181b;  /* Headings, section labels */
+  --color-text-black:        #18181b;  /* Near-black (percentile spans) */
+
+  /* Accent / Semantic — Muted Professional Tones */
+  --color-text-primary:      #4f46e5;  /* Active tabs, percentile display (indigo) */
+  --color-text-blue-hover:   #6366f1;  /* Hover states, active rows */
+  --color-text-accent-blue:  #4338ca;  /* Inline chips, selected list items */
+  --color-text-chip-blue:    #3730a3;  /* Default selection chips */
+  --color-text-indigo:       #4338ca;  /* Add-row button */
+  --color-text-error:        #dc2626;  /* Metric percentile, error code */
+  --color-text-warning:      #d97706;  /* CORS / warning messages */
+  --color-text-red:          #dc2626;  /* Remove buttons */
+  --color-text-dark-red:     #991b1b;  /* Missing primary chip */
+  --color-text-outlier-low:  #dc2626;  /* Outlier below threshold */
+  --color-text-outlier-high: #16a34a;  /* Outlier above threshold */
+
+  /* =========================================================
+   * TEXT TRANSFORM TOGGLES
+   * Set to 'uppercase' to capitalize all, 'none' to leave as-is
+   * ========================================================= */
+  --text-transform-sidebar-tab:         none;
+  --text-transform-sidebar-header:     none;
+  --text-transform-panel-header:      none;
+  --text-transform-panel-description:  none;
+  --text-transform-panel-row:          none;
+  --text-transform-panel-score:        none;
+  --text-transform-category-label:     none;
+  --text-transform-multi-selection:    none;
+  --text-transform-filter:            none;
+  --text-transform-selection-table:    none;
+  --text-transform-tooltip:            none;
+  --text-transform-percentile:          none;
+  --text-transform-metric:             none;
+  --text-transform-inline-metric:      none;
+  --text-transform-page-heading:       none;
+  --text-transform-modal:              none;
+  --text-transform-dataset-option:     none;
+  --text-transform-file-upload:        none;
+  --text-transform-country-name:       none;
+  --text-transform-map-popup:          none;
+}
+
+/* =========================================================
+ * TEXT TRANSFORM RULES — Applied per text field type
+ * Toggle via variables above (uppercase | none)
+ * Uses !important so these overrides apply over styles.css
+ * ========================================================= */
+.sidebar-tab {
+  text-transform: var(--text-transform-sidebar-tab) !important;
+}
+.sidebar-header h2 {
+  text-transform: var(--text-transform-sidebar-header) !important;
+}
+.h-index-header,
+.summation-header,
+.outlier-data-header,
+.control-section h3 {
+  text-transform: var(--text-transform-panel-header) !important;
+}
+.h-index-description,
+.summation-description,
+.outlier-data-description,
+.h-index-empty,
+.summation-empty,
+.outlier-data-empty,
+.h-index-loading,
+.summation-loading,
+.outlier-data-loading,
+.tab-panel-placeholder {
+  text-transform: var(--text-transform-panel-description) !important;
+}
+.h-index-row,
+.h-index-name,
+.summation-row,
+.summation-name,
+.outlier-data-row,
+.outlier-data-name,
+.outlier-data-metrics {
+  text-transform: var(--text-transform-panel-row) !important;
+}
+.h-index-score,
+.summation-score,
+.summation-framework-score,
+.outlier-data-count {
+  text-transform: var(--text-transform-panel-score) !important;
+}
+.category-label {
+  text-transform: var(--text-transform-category-label) !important;
+}
+.multi-selection-box .multi-selection-title,
+.multi-selection-chip {
+  text-transform: var(--text-transform-multi-selection) !important;
+}
+.filter-select-info,
+.filter-empty,
+.filter-select-add-btn,
+.filter-row select,
+.filter-row input {
+  text-transform: var(--text-transform-filter) !important;
+}
+.selection-table-controls,
+.selection-table-empty,
+.selection-table-row select {
+  text-transform: var(--text-transform-selection-table) !important;
+}
+.tooltip,
+.hover-label {
+  text-transform: var(--text-transform-tooltip) !important;
+}
+.percentile-display,
+.percentile-label,
+.percentile-description {
+  text-transform: var(--text-transform-percentile) !important;
+}
+.metric-name,
+.metric-value,
+.metric-percentile {
+  text-transform: var(--text-transform-metric) !important;
+}
+.inline-metric-chip,
+.no-inline-metrics {
+  text-transform: var(--text-transform-inline-metric) !important;
+}
+h1,
+h2 {
+  text-transform: var(--text-transform-page-heading) !important;
+}
+.modal-header h3,
+.column-list-item,
+.modal-btn {
+  text-transform: var(--text-transform-modal) !important;
+}
+.dataset-option span,
+.encoding-mode-option span {
+  text-transform: var(--text-transform-dataset-option) !important;
+}
+.file-upload,
+.file-name {
+  text-transform: var(--text-transform-file-upload) !important;
+}
+.country-name,
+.instructions {
+  text-transform: var(--text-transform-country-name) !important;
+}
+.map-popup-header span {
+  text-transform: var(--text-transform-map-popup) !important;
+}

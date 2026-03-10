@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Beeswarm chart for Filter Select view
  * Renders filtered dataset without selection interactions
  */
@@ -50,7 +50,7 @@ function renderBeeswarmCategoryFilter(metricKey) {
       .attr('y', height / 2)
       .attr('text-anchor', 'middle')
       .attr('fill', '#64748b')
-      .attr('font-size', 14)
+      .attr('font-size', FONTS.size.base)
       .text('No data for this metric with the current filters.');
     window.appState.previousBeeswarmNodes = [];
     return;
@@ -80,7 +80,7 @@ function renderBeeswarmCategoryFilter(metricKey) {
     .attr('transform', `translate(${plotPaddingLeft}, 0)`)
     .call(axis)
     .selectAll('text')
-    .style('font-size', '10px');
+    .style('font-size', FONTS.size.xs + 'px');
 
   for (let p = 10; p < 100; p += 10) {
     const qVal = d3.quantileSorted(sortedVals, p / 100);
@@ -98,7 +98,7 @@ function renderBeeswarmCategoryFilter(metricKey) {
       .attr('x', width - plotPaddingRight + 6)
       .attr('y', qy + 3)
       .attr('fill', '#475569')
-      .attr('font-size', 10)
+      .attr('font-size', FONTS.size.xs)
       .text(`${p}%`);
   }
 
@@ -119,7 +119,7 @@ function renderBeeswarmCategoryFilter(metricKey) {
       .attr('x', width - plotPaddingRight + 6)
       .attr('y', qy + 3)
       .attr('fill', '#475569')
-      .attr('font-size', 10)
+      .attr('font-size', FONTS.size.xs)
       .text(`${p}%`);
   });
 
@@ -167,7 +167,7 @@ function renderBeeswarmCategoryFilter(metricKey) {
       return prev ? prev.y : d.y;
     })
     .attr('r', d => d.r)
-    .attr('fill', d => d.data.highlighted ? '#ef4444' : '#2563eb')
+    .attr('fill', d => d.data.highlighted ? '#ef4444' : '#4f46e5')
     .attr('opacity', 0.9);
 
   circles.exit().remove();
@@ -180,7 +180,7 @@ function renderBeeswarmCategoryFilter(metricKey) {
     .attr('cx', d => Math.max(plotPaddingLeft, Math.min(width - plotPaddingRight, d.x)))
     .attr('cy', d => Math.max(plotPaddingTop, Math.min(height - plotPaddingBottom, d.y)))
     .attr('r', d => d.r)
-    .attr('fill', d => d.data.highlighted ? '#ef4444' : '#2563eb');
+    .attr('fill', d => d.data.highlighted ? '#ef4444' : '#4f46e5');
 
   window.appState.previousBeeswarmNodes = nodes.map(n => ({ ...n }));
 
@@ -231,7 +231,7 @@ function renderBeeswarmCategoryFilter(metricKey) {
         hoverLabel.style.border = 'none';
         hoverLabel.style.padding = '0';
         hoverLabel.style.borderRadius = '0';
-        hoverLabel.style.fontWeight = 'normal';
+        hoverLabel.style.fontWeight = FONTS.weight.normal;
       }
     })
     .on('mousemove', function(evt) {
@@ -259,8 +259,8 @@ function renderBeeswarmCategoryFilter(metricKey) {
     .attr('x', plotPaddingLeft + 6)
     .attr('y', 18)
     .attr('fill', '#2c3e50')
-    .attr('font-size', 14)
-    .attr('font-weight', 'bold')
+    .attr('font-size', FONTS.size.base)
+    .attr('font-weight', FONTS.weight.bold)
     .text(window.formatMetricName ? window.formatMetricName(metricKey) : metricKey);
 }
 

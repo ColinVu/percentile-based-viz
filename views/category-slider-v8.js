@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Category Slider (Filter Select)
  * Provides metric listing driven by user-defined filters
  */
@@ -251,8 +251,8 @@
     } else {
       const note = document.createElement('span');
       note.textContent = 'Unsupported column type';
-      note.style.fontSize = '12px';
-      note.style.color = '#9ca3af';
+      note.style.fontSize = 'var(--font-size-md)';
+      note.style.color = 'var(--color-text-note)';
       secondLine.appendChild(note);
     }
 
@@ -365,7 +365,7 @@
       metricName.textContent = window.formatMetricName ? window.formatMetricName(key) : key;
 
       const percentileSpan = document.createElement('span');
-      percentileSpan.style.cssText = 'float: right; font-weight: bold; color: #000000;';
+      percentileSpan.style.cssText = 'float: right; font-weight: var(--font-weight-bold); color: var(--color-text-black);';
       if (Number.isFinite(average)) {
         percentileSpan.textContent = average >= 1000
           ? average.toLocaleString(undefined, { maximumFractionDigits: 0 })

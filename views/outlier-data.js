@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Outlier Data view
  * Shows which records are outliers (top 5% or bottom 5%) for each variable
  */
@@ -57,7 +57,7 @@ function renderOutlierData(container) {
     
     // Toggle button
     const toggleContainer = document.createElement('div');
-    toggleContainer.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 11px; background: white; padding: 6px 10px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);';
+    toggleContainer.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: var(--font-size-sm); background: white; padding: 6px 10px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);';
     
     const toggleCheckbox = document.createElement('input');
     toggleCheckbox.type = 'checkbox';
@@ -68,7 +68,7 @@ function renderOutlierData(container) {
     const toggleLabel = document.createElement('label');
     toggleLabel.htmlFor = 'outlier-compact-mode-checkbox';
     toggleLabel.textContent = 'Compact';
-    toggleLabel.style.cssText = 'cursor: pointer; user-select: none; color: #475569; font-weight: 500;';
+    toggleLabel.style.cssText = 'cursor: pointer; user-select: none; color: var(--color-text-medium); font-weight: var(--font-weight-medium);';
     
     toggleContainer.appendChild(toggleCheckbox);
     toggleContainer.appendChild(toggleLabel);

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Category Slider (Comparison)
  * Shows metrics with evenly spaced labels (not percentile-based positioning)
  */
@@ -56,11 +56,11 @@ function renderCategoryMetricListV5() {
     
     // Create container for percentiles on right
     const percentilesContainer = document.createElement('span');
-    percentilesContainer.style.cssText = 'float: right; font-weight: bold;';
+    percentilesContainer.style.cssText = 'float: right; font-weight: var(--font-weight-bold);';
     
     // Main location percentile (black)
     const mainPercentileSpan = document.createElement('span');
-    mainPercentileSpan.style.cssText = 'color: #000000;';
+    mainPercentileSpan.style.cssText = 'color: var(--color-text-black);';
     mainPercentileSpan.textContent = pct >= 0 ? `${pct}%` : '';
     percentilesContainer.appendChild(mainPercentileSpan);
     
@@ -292,7 +292,7 @@ function renderBeeswarmCategoryComparison(metricKey) {
   const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
   const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
   const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
-  axisG.selectAll('text').style('font-size', '10px');
+  axisG.selectAll('text').style('font-size', FONTS.size.xs + 'px');
 
   // Horizontal guides at deciles
   for (let p = 10; p < 100; p += 10) {
@@ -312,7 +312,7 @@ function renderBeeswarmCategoryComparison(metricKey) {
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .text(`${p}%`);
     }
   }
@@ -335,7 +335,7 @@ function renderBeeswarmCategoryComparison(metricKey) {
         .attr('x', width - plotPaddingRight + 6)
         .attr('y', qy + 3)
         .attr('fill', '#475569')
-        .attr('font-size', 10)
+        .attr('font-size', FONTS.size.xs)
         .text(`${P}%`);
     }
   });
@@ -372,7 +372,7 @@ function renderBeeswarmCategoryComparison(metricKey) {
     if (label === window.appState.selectedCountry) {
       return '#e74c3c'; // Red for main country
     } else if (label === window.appState.comparisonCountry && window.appState.comparisonCountry !== '') {
-      return '#3498db'; // Blue for comparison country
+      return '#4f46e5'; // Blue for comparison country
     } else {
       return '#9b59b6'; // Purple for others
     }
@@ -436,7 +436,7 @@ function renderBeeswarmCategoryComparison(metricKey) {
         .attr('stroke-width', 2)
         .attr('fill', d => {
           if (d.data.label === window.appState.selectedCountry) return '#c0392b';
-          if (d.data.label === window.appState.comparisonCountry && window.appState.comparisonCountry !== '') return '#2980b9';
+          if (d.data.label === window.appState.comparisonCountry && window.appState.comparisonCountry !== '') return '#4338ca';
           return '#8e44ad';
         })
         .attr('r', d.r + 2.5);
@@ -510,7 +510,7 @@ function renderBeeswarmCategoryComparison(metricKey) {
       hoverLabel.style.border = 'none';
       hoverLabel.style.padding = '0';
       hoverLabel.style.borderRadius = '0';
-      hoverLabel.style.fontWeight = 'normal';
+      hoverLabel.style.fontWeight = FONTS.weight.normal;
     })
     .on('mousemove', function(evt) {
       const [, my] = d3.pointer(evt);
@@ -533,8 +533,8 @@ function renderBeeswarmCategoryComparison(metricKey) {
     .attr('x', plotPaddingLeft + 6)
     .attr('y', 18)
     .attr('fill', '#2c3e50')
-    .attr('font-size', 14)
-    .attr('font-weight', 'bold')
+    .attr('font-size', FONTS.size.base)
+    .attr('font-weight', FONTS.weight.bold)
     .text(window.formatMetricName(metricKey));
 
   // Add legend for comparison view
@@ -553,7 +553,7 @@ function renderBeeswarmCategoryComparison(metricKey) {
     .attr('x', -20)
     .attr('y', 4)
     .attr('text-anchor', 'end')
-    .attr('font-size', 11)
+    .attr('font-size', FONTS.size.sm)
     .attr('fill', '#2c3e50')
     .text('Main location');
 
@@ -564,12 +564,12 @@ function renderBeeswarmCategoryComparison(metricKey) {
       .attr('cx', -10)
       .attr('cy', 0)
       .attr('r', 5)
-      .attr('fill', '#3498db');
+      .attr('fill', '#4f46e5');
     compLegend.append('text')
       .attr('x', -20)
       .attr('y', 4)
       .attr('text-anchor', 'end')
-      .attr('font-size', 11)
+      .attr('font-size', FONTS.size.sm)
       .attr('fill', '#2c3e50')
       .text('Comparison');
   }

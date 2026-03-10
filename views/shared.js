@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Shared utilities and state management
  * This file contains code shared across all views
  */
@@ -49,7 +49,7 @@ function getPercentileColor(percentile) {
   }
   
   // Define color stops: blue (0%) -> white (50%) -> orange (100%)
-  const blue = { r: 59, g: 130, b: 246 };   // #3b82f6
+  const blue = { r: 99, g: 102, b: 241 };   // #6366f1
   const white = { r: 255, g: 255, b: 255 }; // #ffffff
   const orange = { r: 249, g: 115, b: 22 }; // #f97316
   

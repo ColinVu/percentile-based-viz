@@ -13,7 +13,7 @@
 
   <div class="cors-info" id="cors-info" style="display: none;">
     <div class="cors-message">
-      <h3>⚠️ File Access Restriction</h3>
+      <h3>âš ï¸ File Access Restriction</h3>
       <p>The browser is blocking access to the Excel files due to CORS policy when opening the HTML file directly.</p>
       <p><strong>Solutions:</strong></p>
       <ol>
@@ -197,7 +197,8 @@
     <div class="header-center">
       <div class="header-title">
         <h1 id="app-title">Factxis</h1>
-        <h2>Visualizing Datasets by Percentiles</h2>
+        <span class="header-divider"></span>
+        <h2>Visualization By Percentile</h2>
       </div>
     </div>
     <div class="header-right">
@@ -219,7 +220,7 @@
       </div>
       <!-- <div class="scroll-indicator">
         <div>Scroll on the left to explore percentiles</div>
-        <div class="scroll-icon">↕</div> -->
+        <div class="scroll-icon">â†•</div> -->
       </div>
     </div>
   </div>
@@ -235,7 +236,7 @@
         <!-- Map Panel Popup (resizable) -->
         <div id="map-panel-popup" class="map-popup" style="display: none;">
           <div class="map-popup-header" id="map-popup-header">
-            <button class="map-popup-close" id="map-popup-close">×</button>
+            <button class="map-popup-close" id="map-popup-close">Ã—</button>
           </div>
           <div class="map-popup-content">
             <svg id="map-svg" width="380" height="300"></svg>
@@ -263,6 +264,7 @@
 
   <!-- Include SheetJS library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="fonts.js"></script>
   
   <!-- Load SimilarityIndex for finding similar records -->
   <script src="SimilarityIndex.js"></script>
@@ -529,7 +531,7 @@
       const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
       const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
       const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
-      axisG.selectAll('text').style('font-size', '10px');
+      axisG.selectAll('text').style('font-size', FONTS.size.xs + 'px');
 
       // Horizontal guides at deciles
       for (let p = 10; p < 100; p += 10) {
@@ -549,7 +551,7 @@
             .attr('x', width - plotPaddingRight + 6)
             .attr('y', qy + 3)
             .attr('fill', '#475569')
-            .attr('font-size', 10)
+            .attr('font-size', FONTS.size.xs)
             .text(`${p}%`);
         }
       }
@@ -574,7 +576,7 @@
             .attr('x', width - plotPaddingRight + 6)
             .attr('y', qy + 3)
             .attr('fill', '#475569')
-            .attr('font-size', 10)
+            .attr('font-size', FONTS.size.xs)
             .text(`${P}%`);
         }
       });
@@ -714,7 +716,7 @@
           hoverLabel.style.border = 'none';
           hoverLabel.style.padding = '0';
           hoverLabel.style.borderRadius = '0';
-          hoverLabel.style.fontWeight = 'normal';
+          hoverLabel.style.fontWeight = FONTS.weight.normal;
         })
         .on('mousemove', function(evt) {
           const [, my] = d3.pointer(evt);
@@ -737,8 +739,8 @@
         .attr('x', plotPaddingLeft + 6)
         .attr('y', 18)
         .attr('fill', '#2c3e50')
-        .attr('font-size', 14)
-        .attr('font-weight', 'bold')
+        .attr('font-size', FONTS.size.base)
+        .attr('font-weight', FONTS.weight.bold)
         .text(window.formatMetricName(metricKey));
     }
     
@@ -926,7 +928,7 @@
       
       // Default colors for selection mode
       const SELECTION_MODE_COLORS = [
-        '#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', 
+        '#ef4444', '#6366f1', '#10b981', '#f59e0b', '#8b5cf6', 
         '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
         '#14b8a6', '#eab308', '#a855f7', '#22c55e', '#0ea5e9'
       ];
@@ -1009,10 +1011,10 @@
             const colorLabel = document.createElement('div');
             colorLabel.textContent = 'Color:';
             colorLabel.style.cssText = `
-              font-size: 10px;
-              color: #64748b;
+              font-size: var(--font-size-xs);
+              color: var(--color-text-muted);
               margin-bottom: 4px;
-              font-weight: 500;
+              font-weight: var(--font-weight-medium);
             `;
             
             const input = document.createElement('input');
@@ -1022,8 +1024,8 @@
             input.style.cssText = `
               width: 80px;
               padding: 4px 8px;
-              font-size: 12px;
-              font-family: monospace;
+              font-size: var(--font-size-md);
+              font-family: var(--font-family-mono);
               border: 1px solid #e2e8f0;
               border-radius: 3px;
               outline: none;
@@ -1106,7 +1108,7 @@
           // Remove button
           const removeBtn = document.createElement('div');
           removeBtn.className = 'selection-table-remove';
-          removeBtn.innerHTML = '&times;';  // Use HTML entity for ×
+          removeBtn.innerHTML = '&times;';  // Use HTML entity for Ã—
           removeBtn.title = 'Remove location';
           removeBtn.addEventListener('click', function(evt) {
             evt.stopPropagation();

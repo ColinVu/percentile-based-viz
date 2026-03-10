@@ -1,4 +1,4 @@
-/**
+﻿/**
  * H-index view
  * Displays all records with their H-index scores in a 2-column layout.
  * The H-index score represents how many metrics are at least k percentile points away from 50,
@@ -72,7 +72,7 @@ function renderHIndex(container) {
       // Right column: Score
       const scoreCol = document.createElement('div');
       scoreCol.className = 'h-index-score';
-      scoreCol.textContent = hIndexScore !== null ? String(hIndexScore) : '—';
+      scoreCol.textContent = hIndexScore !== null ? String(hIndexScore) : 'â€”';
 
       row.appendChild(nameCol);
       row.appendChild(scoreCol);

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Box Plot rendering for Box and Whisker view
  */
 
@@ -63,7 +63,7 @@ function renderBoxPlotCategory(metricKey) {
   const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
   const axis = d3.axisLeft(y).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
   const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
-  axisG.selectAll('text').style('font-size', '10px');
+  axisG.selectAll('text').style('font-size', FONTS.size.xs + 'px');
 
   // Compute quartiles and whiskers
   const q1 = d3.quantileSorted(sortedVals, 0.25);
@@ -152,8 +152,8 @@ function renderBoxPlotCategory(metricKey) {
     .attr('x', plotPaddingLeft + 6)
     .attr('y', 18)
     .attr('fill', '#2c3e50')
-    .attr('font-size', 14)
-    .attr('font-weight', 'bold')
+    .attr('font-size', FONTS.size.base)
+    .attr('font-weight', FONTS.weight.bold)
     .text(window.formatMetricName(metricKey));
 
   // Hover horizontal line and percentile label

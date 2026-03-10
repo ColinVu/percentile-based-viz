@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Horizontal View
  * Shows beeswarm plot with horizontal value axis
  */
@@ -83,7 +83,7 @@ function renderBeeswarm(metricKey) {
   const isPercentMetric = /Pct|percent|Percent/.test(metricKey);
   const axis = d3.axisBottom(x).ticks(10).tickFormat(d => isPercentMetric ? `${Math.round(d)}%` : d);
   const axisG = svg.append('g').attr('transform', `translate(0, ${height - 30})`).call(axis);
-  axisG.selectAll('text').style('font-size', '10px');
+  axisG.selectAll('text').style('font-size', FONTS.size.xs + 'px');
 
   // Vertical guides at each 10th percentile (10..90)
   for (let p = 10; p < 100; p += 10) {
@@ -134,7 +134,7 @@ function renderBeeswarm(metricKey) {
     .attr('r', d => d.data.label === window.appState.selectedCountry ? d.r + 1.5 : d.r)
     .attr('fill', d => {
       const label = d.data.label;
-      return label === window.appState.selectedCountry ? '#e74c3c' : '#3498db';
+      return label === window.appState.selectedCountry ? '#e74c3c' : '#4f46e5';
     })
     .attr('opacity', 0.85)
     .on('mouseenter', function(evt, d) {
@@ -161,7 +161,7 @@ function renderBeeswarm(metricKey) {
       tooltip.classed('hidden', true);
       d3.select(this)
         .attr('stroke', 'none')
-        .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#3498db'))
+        .attr('fill', d => (d.data.label === window.appState.selectedCountry ? '#e74c3c' : '#4f46e5'))
         .attr('r', d => d.r);
     });
 
@@ -206,8 +206,8 @@ function renderBeeswarm(metricKey) {
     .attr('x', 40)
     .attr('y', 20)
     .attr('fill', '#2c3e50')
-    .attr('font-size', 14)
-    .attr('font-weight', 'bold')
+    .attr('font-size', FONTS.size.base)
+    .attr('font-weight', FONTS.weight.bold)
     .text(window.formatMetricName(metricKey));
 }
 

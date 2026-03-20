@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Map Panel for Final View
  * Displays US counties map colored by selection colors
  */
@@ -12,6 +12,12 @@ let isLoadingMap = false;
 // Store zoom transforms to preserve zoom state across re-renders
 let currentZoomTransform = null;
 let currentMapType = null; // Track which map is currently displayed
+
+// ── Tweak these to adjust when overlays appear on the world map ──────────────
+const WORLD_STATES_ZOOM_THRESHOLD  = 4;   // zoom level to show US state borders
+const WORLD_COUNTIES_ZOOM_THRESHOLD = 10;  // zoom level to show US county borders
+const MAX_ZOOM = 50;                        // max zoom for all maps
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Detect if dataset has FIPS code column
 function detectFIPSColumn() {
@@ -280,6 +286,13 @@ async function getColorForCountryCode(countryNumericCode, row) {
   }
 }
 
+// Show/hide the state and county overlay groups based on the current zoom level only.
+// The SVG viewBox clips anything off-screen automatically, so no viewport check is needed.
+function applyOverlayVisibility(k, statesGroup, countiesGroup) {
+  statesGroup.style('display',  k >= WORLD_STATES_ZOOM_THRESHOLD  ? null : 'none');
+  countiesGroup.style('display', k >= WORLD_COUNTIES_ZOOM_THRESHOLD ? null : 'none');
+}
+
 // Load US counties TopoJSON
 async function loadUSCountiesMap() {
   if (usCountiesData) return usCountiesData;
@@ -429,7 +442,40 @@ async function renderLatLongMap(svgElement, width, height) {
     .attr('fill', '#e2e8f0')
     .attr('stroke', '#cbd5e1')
     .attr('stroke-width', 0.5);
-  
+
+  // Preload us-atlas data for state/county overlays at higher zoom levels
+  const usAtlasData = await loadUSCountiesMap();
+
+  // Render US states overlay (borders only, geographic coords → same NaturalEarth path)
+  const usStatesOverlay = g.append('g').attr('class', 'us-states-overlay');
+  if (usAtlasData) {
+    const usStates = topojson.feature(usAtlasData, usAtlasData.objects.states);
+    usStatesOverlay.selectAll('path')
+      .data(usStates.features)
+      .join('path')
+      .attr('d', path)
+      .attr('fill', 'none')
+      .attr('stroke', '#64748b')
+      .attr('stroke-width', 1)
+      .style('vector-effect', 'non-scaling-stroke')
+      .attr('pointer-events', 'none');
+  }
+
+  // Render US counties overlay (borders only)
+  const usCountiesOverlay = g.append('g').attr('class', 'us-counties-overlay');
+  if (usAtlasData) {
+    const usCountiesFeat = topojson.feature(usAtlasData, usAtlasData.objects.counties);
+    usCountiesOverlay.selectAll('path')
+      .data(usCountiesFeat.features)
+      .join('path')
+      .attr('d', path)
+      .attr('fill', 'none')
+      .attr('stroke', '#94a3b8')
+      .attr('stroke-width', 0.5)
+      .style('vector-effect', 'non-scaling-stroke')
+      .attr('pointer-events', 'none');
+  }
+
   // Render dots for each location
   const inSelectionMode = window.appState.encodingMode === 'selection' && 
                           window.appState.viewMode === 'category-final';
@@ -542,7 +588,7 @@ async function renderLatLongMap(svgElement, width, height) {
   
   // Add zoom behavior
   const zoom = d3.zoom()
-    .scaleExtent([1, 8])
+    .scaleExtent([1, MAX_ZOOM])
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
       currentZoomTransform = event.transform;
@@ -552,10 +598,17 @@ async function renderLatLongMap(svgElement, width, height) {
       circles
         .attr('r', 4 / scale)
         .attr('stroke-width', 0.5 / scale);
+
+      // Show/hide overlays based on zoom level
+      applyOverlayVisibility(scale, usStatesOverlay, usCountiesOverlay);
     });
   
   svg.call(zoom);
-  
+
+  // Apply initial overlay visibility
+  const initialTransform = currentZoomTransform || d3.zoomIdentity;
+  applyOverlayVisibility(initialTransform.k, usStatesOverlay, usCountiesOverlay);
+
   // Restore previous zoom state if it exists
   if (currentZoomTransform) {
     svg.call(zoom.transform, currentZoomTransform);
@@ -720,19 +773,62 @@ async function renderWorldMap(svgElement, width, height) {
         .attr('stroke-width', 0.5 / currentScale);
     });
   
+  // Preload us-atlas data for state/county overlays at higher zoom levels
+  const usAtlasData = await loadUSCountiesMap();
+
+  // us-atlas features have geographic (lon/lat) coordinates — render with the same
+  // NaturalEarth `path` generator already used for countries (no SVG group transform needed).
+
+  // Render US states overlay (borders only, no fill)
+  const usStatesOverlay = g.append('g').attr('class', 'us-states-overlay');
+  if (usAtlasData) {
+    const usStates = topojson.feature(usAtlasData, usAtlasData.objects.states);
+    usStatesOverlay.selectAll('path')
+      .data(usStates.features)
+      .join('path')
+      .attr('d', path)
+      .attr('fill', 'none')
+      .attr('stroke', '#64748b')
+      .attr('stroke-width', 1)
+      .style('vector-effect', 'non-scaling-stroke')
+      .attr('pointer-events', 'none');
+  }
+
+  // Render US counties overlay (borders only, no fill)
+  const usCountiesOverlay = g.append('g').attr('class', 'us-counties-overlay');
+  if (usAtlasData) {
+    const usCountiesFeat = topojson.feature(usAtlasData, usAtlasData.objects.counties);
+    usCountiesOverlay.selectAll('path')
+      .data(usCountiesFeat.features)
+      .join('path')
+      .attr('d', path)
+      .attr('fill', 'none')
+      .attr('stroke', '#94a3b8')
+      .attr('stroke-width', 0.5)
+      .style('vector-effect', 'non-scaling-stroke')
+      .attr('pointer-events', 'none');
+  }
+
   // Add zoom behavior
   const zoom = d3.zoom()
-    .scaleExtent([1, 8])
+    .scaleExtent([1, MAX_ZOOM])
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
       currentZoomTransform = event.transform;
-      
-      // Keep stroke width constant by inversely scaling it
+
+      // Keep country stroke width constant (overlay strokes handled by vector-effect)
       const scale = event.transform.k;
       countryPaths.attr('stroke-width', 0.5 / scale);
+
+      // Show/hide overlays based on zoom level
+      applyOverlayVisibility(scale, usStatesOverlay, usCountiesOverlay);
     });
-  
+
   svg.call(zoom);
+
+  // Apply initial overlay visibility for the case where the map re-renders at an existing zoom level
+  const initialTransform = currentZoomTransform || d3.zoomIdentity;
+  applyOverlayVisibility(initialTransform.k, usStatesOverlay, usCountiesOverlay);
   
   // Restore previous zoom state if it exists
   if (currentZoomTransform) {
@@ -844,7 +940,7 @@ async function renderUSMap(svgElement, width, height) {
   
   // Add zoom behavior
   const zoom = d3.zoom()
-    .scaleExtent([1, 8])
+    .scaleExtent([1, MAX_ZOOM])
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
       currentZoomTransform = event.transform;

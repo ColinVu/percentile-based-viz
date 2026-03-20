@@ -405,21 +405,11 @@
       };
 
       if (selected === 'custom') {
-        const fileInput = document.getElementById('file-input');
-        const file = fileInput && fileInput.files ? fileInput.files[0] : null;
-        if (!file) {
-          link.href = '#';
-          link.removeAttribute('download');
-          setDatasetDownloadDisabled(true);
-          return;
-        }
-        const objectUrl = URL.createObjectURL(file);
-        window.__customDatasetObjectUrl = objectUrl;
-        link.href = objectUrl;
-        link.setAttribute('download', file.name || 'dataset.xlsx');
-        setDatasetDownloadDisabled(false);
+        link.style.display = 'none';
         return;
       }
+
+      link.style.display = '';
 
       const info = builtIn[selected];
       if (!info) {

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Shared utilities and state management
  * This file contains code shared across all views
  */
@@ -34,7 +34,7 @@ window.appState = {
 function formatMetricName(metric) {
   return metric
     .replace(/_/g, ' ')
-    .replace(/([A-Z])/g, ' $1')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/([0-9]+)/g, ' $1 ')
     .replace(/\s+/g, ' ')
     .trim()

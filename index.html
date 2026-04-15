@@ -270,7 +270,7 @@
     </div>
   </div>
 
-  <!-- Column cap dialog (custom uploads with many columns) -->
+  <!-- Column cap dialog: used only when views/shared.js ENABLE_CUSTOM_DATASET_COLUMN_CAP is true -->
   <div id="column-cap-dialog" class="modal-overlay" style="display: none;">
     <div class="modal-dialog">
       <div class="modal-header">
@@ -984,9 +984,10 @@
         let columns = window.appState.jsonData && window.appState.jsonData.length > 0
           ? Object.keys(window.appState.jsonData[0])
           : [];
-        const allow = window.appState.customVizColumnAllowlist;
-        if (Array.isArray(allow) && allow.length > 0) {
-          const allowSet = new Set(allow);
+        if (window.ENABLE_CUSTOM_DATASET_COLUMN_CAP &&
+            Array.isArray(window.appState.customVizColumnAllowlist) &&
+            window.appState.customVizColumnAllowlist.length > 0) {
+          const allowSet = new Set(window.appState.customVizColumnAllowlist);
           columns = columns.filter(c => allowSet.has(c));
         }
         
@@ -2236,12 +2237,14 @@
       
       function confirmColumnSelection(columnName) {
         window.appState.selectedDataColumn = columnName;
-        const eligible = typeof window.getEligibleCustomVizColumns === 'function'
-          ? window.getEligibleCustomVizColumns(columnName)
-          : [];
-        if (eligible.length > 30) {
-          showColumnCapDialog(eligible);
-          return;
+        if (window.ENABLE_CUSTOM_DATASET_COLUMN_CAP) {
+          const eligible = typeof window.getEligibleCustomVizColumns === 'function'
+            ? window.getEligibleCustomVizColumns(columnName)
+            : [];
+          if (eligible.length > 30) {
+            showColumnCapDialog(eligible);
+            return;
+          }
         }
         window.appState.customVizColumnAllowlist = null;
         window.processData();

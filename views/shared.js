@@ -32,6 +32,19 @@ window.appState = {
   }
 };
 
+/**
+ * Custom uploads with many columns: optional second modal to cap visualization columns at 30.
+ * Re-enable: set to `true`. UI is `#column-cap-dialog` + `showColumnCapDialog` in index.html;
+ * filtering uses `appState.customVizColumnAllowlist` in this file and `refreshTextEncodingDropdown` in index.html.
+ */
+window.ENABLE_CUSTOM_DATASET_COLUMN_CAP = false;
+
+function isCustomVizColumnAllowlistActive() {
+  return !!window.ENABLE_CUSTOM_DATASET_COLUMN_CAP &&
+    Array.isArray(window.appState.customVizColumnAllowlist) &&
+    window.appState.customVizColumnAllowlist.length > 0;
+}
+
 // Format metric names for display
 function formatMetricName(metric) {
   return metric
@@ -143,9 +156,8 @@ function calculatePercentiles(entityLabel) {
     idCols = [window.appState.dataColumn];
   }
   let metrics = Object.keys(entityData).filter(key => !idCols.includes(key));
-  const allow = window.appState.customVizColumnAllowlist;
-  if (Array.isArray(allow) && allow.length > 0) {
-    const allowSet = new Set(allow);
+  if (isCustomVizColumnAllowlistActive()) {
+    const allowSet = new Set(window.appState.customVizColumnAllowlist);
     metrics = metrics.filter(key => allowSet.has(key));
   }
   metrics = metrics.filter(m => !isFipsColumnName(m));
@@ -202,9 +214,8 @@ function getNumericMetrics() {
   let numericMetrics = keys.filter(key => {
     return window.appState.jsonData.some(d => d[key] !== '..' && d[key] !== undefined && d[key] !== null && !isNaN(parseFloat(d[key])));
   });
-  const allow = window.appState.customVizColumnAllowlist;
-  if (Array.isArray(allow) && allow.length > 0) {
-    const allowSet = new Set(allow);
+  if (isCustomVizColumnAllowlistActive()) {
+    const allowSet = new Set(window.appState.customVizColumnAllowlist);
     numericMetrics = numericMetrics.filter(k => allowSet.has(k));
   }
   return numericMetrics;
@@ -239,9 +250,8 @@ function getNominalColumns() {
     }
     return encounteredValidValue && hasCategoricalValue;
   });
-  const allowNom = window.appState.customVizColumnAllowlist;
-  if (Array.isArray(allowNom) && allowNom.length > 0) {
-    const allowSet = new Set(allowNom);
+  if (isCustomVizColumnAllowlistActive()) {
+    const allowSet = new Set(window.appState.customVizColumnAllowlist);
     return nominalKeys.filter(k => allowSet.has(k));
   }
   return nominalKeys;

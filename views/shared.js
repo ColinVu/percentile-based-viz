@@ -12,6 +12,8 @@ window.appState = {
   geoMode: 'country', // 'country' or 'county' or 'custom'
   dataColumn: null, // The column to use as the main identifier (e.g., 'Country', 'County', or custom)
   selectedDataColumn: null, // The column selected by the user for custom datasets
+  customVizColumnAllowlist: null, // Custom uploads: if set, only these columns appear in viz lists (max 30)
+  presetDatasetId: null, // Built-in preset key, e.g. 'nsa-names-atl' (null for generic custom / other built-ins)
   scroller: null,
   viewMode: 'category-final', // Default to Faxis mode. Old modes: 'percentile' | 'identifier' | 'category' | 'category-v2' | 'category-v3' | 'box' | 'category-v8'
   categorySelectedMetricKey: null,
@@ -93,6 +95,26 @@ function createPercentileGradient(percentiles) {
   return `linear-gradient(to bottom, ${gradientStops.join(', ')})`;
 }
 
+// True if column name is a FIPS identifier (not a metric to visualize)
+function isFipsColumnName(name) {
+  if (name == null || name === '') return false;
+  const s = String(name).trim();
+  if (/^fips$/i.test(s) || /^fips[_\s]?code$/i.test(s)) return true;
+  const norm = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return norm === 'fipscode';
+}
+
+// Ordered keys eligible for custom viz column cap (excludes row id and FIPS)
+function getEligibleCustomVizColumns(identifierColumn) {
+  if (!window.appState.jsonData || window.appState.jsonData.length === 0) return [];
+  const row = window.appState.jsonData[0];
+  return Object.keys(row).filter(k => {
+    if (k === '__displayName') return false;
+    if (identifierColumn != null && k === identifierColumn) return false;
+    return !isFipsColumnName(k);
+  });
+}
+
 // Calculate percentiles for a selected entity
 function calculatePercentiles(entityLabel) {
   let entityData = null;
@@ -120,7 +142,13 @@ function calculatePercentiles(entityLabel) {
     // Custom mode - skip the data column
     idCols = [window.appState.dataColumn];
   }
-  const metrics = Object.keys(entityData).filter(key => !idCols.includes(key));
+  let metrics = Object.keys(entityData).filter(key => !idCols.includes(key));
+  const allow = window.appState.customVizColumnAllowlist;
+  if (Array.isArray(allow) && allow.length > 0) {
+    const allowSet = new Set(allow);
+    metrics = metrics.filter(key => allowSet.has(key));
+  }
+  metrics = metrics.filter(m => !isFipsColumnName(m));
   
   // Calculate percentile for each metric
   window.appState.currentPercentiles = {};
@@ -171,9 +199,14 @@ function getNumericMetrics() {
     idCols = [window.appState.dataColumn];
   }
   const keys = Object.keys(sample).filter(k => !idCols.includes(k));
-  const numericMetrics = keys.filter(key => {
+  let numericMetrics = keys.filter(key => {
     return window.appState.jsonData.some(d => d[key] !== '..' && d[key] !== undefined && d[key] !== null && !isNaN(parseFloat(d[key])));
   });
+  const allow = window.appState.customVizColumnAllowlist;
+  if (Array.isArray(allow) && allow.length > 0) {
+    const allowSet = new Set(allow);
+    numericMetrics = numericMetrics.filter(k => allowSet.has(k));
+  }
   return numericMetrics;
 }
 
@@ -206,6 +239,11 @@ function getNominalColumns() {
     }
     return encounteredValidValue && hasCategoricalValue;
   });
+  const allowNom = window.appState.customVizColumnAllowlist;
+  if (Array.isArray(allowNom) && allowNom.length > 0) {
+    const allowSet = new Set(allowNom);
+    return nominalKeys.filter(k => allowSet.has(k));
+  }
   return nominalKeys;
 }
 
@@ -239,6 +277,8 @@ window.createPercentileGradient = createPercentileGradient;
 window.calculatePercentiles = calculatePercentiles;
 window.getNumericMetrics = getNumericMetrics;
 window.getNominalColumns = getNominalColumns;
+window.isFipsColumnName = isFipsColumnName;
+window.getEligibleCustomVizColumns = getEligibleCustomVizColumns;
 window.formatValue = formatValue;
 window.updateCountryInfo = updateCountryInfo;
 

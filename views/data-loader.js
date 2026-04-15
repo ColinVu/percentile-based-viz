@@ -18,6 +18,8 @@ async function loadSelectedDataset() {
       await loadCountryDevelopmentData();
     } else if (selectedDataset === 'colleges') {
       await loadCollegesData();
+    } else if (selectedDataset === 'nsa-names-atl') {
+      await loadNSANamesAtlData();
     }
     // Custom dataset is handled by file input event
   } catch (error) {
@@ -45,6 +47,8 @@ async function loadUSCountyData() {
     window.appState.jsonData = XLSX.utils.sheet_to_json(worksheet);
     // Clear custom column selection for built-in dataset
     window.appState.selectedDataColumn = null;
+    window.appState.customVizColumnAllowlist = null;
+    window.appState.presetDatasetId = null;
     processData();
   } catch (error) {
     console.error('Error loading Georgia County data:', error);
@@ -69,6 +73,8 @@ async function loadCountryDevelopmentData() {
     window.appState.jsonData = XLSX.utils.sheet_to_json(worksheet);
     // Clear custom column selection for built-in dataset
     window.appState.selectedDataColumn = null;
+    window.appState.customVizColumnAllowlist = null;
+    window.appState.presetDatasetId = null;
     processData();
   } catch (error) {
     console.error('Error loading Country Development data:', error);
@@ -93,11 +99,33 @@ async function loadCollegesData() {
     window.appState.jsonData = XLSX.utils.sheet_to_json(worksheet);
     // Clear custom column selection for built-in dataset
     window.appState.selectedDataColumn = null;
+    window.appState.customVizColumnAllowlist = null;
+    window.appState.presetDatasetId = null;
     processData();
   } catch (error) {
     console.error('Error loading Colleges data:', error);
     // Fallback to sample colleges data
     loadFallbackCollegesData();
+  }
+}
+
+// Load NSA names (Atlanta variables) — custom-style sheet with NAME as row identifier
+async function loadNSANamesAtlData() {
+  try {
+    const response = await fetch('NSA_Names_AllVariables_atl.xlsx');
+    const arrayBuffer = await response.arrayBuffer();
+    const data = new Uint8Array(arrayBuffer);
+    const workbook = XLSX.read(data, { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    window.appState.jsonData = XLSX.utils.sheet_to_json(worksheet);
+    window.appState.selectedDataColumn = 'NAME';
+    window.appState.customVizColumnAllowlist = null;
+    window.appState.presetDatasetId = 'nsa-names-atl';
+    processData();
+  } catch (error) {
+    console.error('Error loading NSA Names (Atlanta) data:', error);
+    alert('Error loading NSA_Names_AllVariables_atl.xlsx. Ensure the file is next to index.html.');
   }
 }
 
@@ -167,6 +195,8 @@ function loadFallbackCountyData() {
   }
   // Clear custom column selection for built-in dataset
   window.appState.selectedDataColumn = null;
+  window.appState.customVizColumnAllowlist = null;
+  window.appState.presetDatasetId = null;
   processData();
 }
 
@@ -241,6 +271,8 @@ function loadFallbackCountryData() {
   }
   // Clear custom column selection for built-in dataset
   window.appState.selectedDataColumn = null;
+  window.appState.customVizColumnAllowlist = null;
+  window.appState.presetDatasetId = null;
   processData();
 }
 
@@ -310,6 +342,8 @@ function loadFallbackCollegesData() {
   }
   // Clear custom column selection for built-in dataset
   window.appState.selectedDataColumn = null;
+  window.appState.customVizColumnAllowlist = null;
+  window.appState.presetDatasetId = null;
   processData();
 }
 

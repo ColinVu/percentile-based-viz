@@ -9,7 +9,13 @@ function renderCategoryMetricListFinal() {
   // Exclude FIPS code metrics (handle variants: "FIPS_Code", "F I P S Code", "FIPS Code", etc.)
   const metrics = window.getNumericMetrics().filter(m => {
     const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-    return norm !== 'fipscode';
+    if (norm === 'fipscode') return false;
+    // NSA preset: X/Y are map coordinates (see map-panel detectLatLongColumns); hide from metric list only
+    if (window.appState.presetDatasetId === 'nsa-names-atl') {
+      const raw = (m || '').toString().trim();
+      if (/^x$/i.test(raw) || /^y$/i.test(raw)) return false;
+    }
+    return true;
   });
   listEl.innerHTML = '';
 

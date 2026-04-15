@@ -16,8 +16,64 @@ let currentMapType = null; // Track which map is currently displayed
 // ── Tweak these to adjust when overlays appear on the world map ──────────────
 const WORLD_STATES_ZOOM_THRESHOLD  = 4;   // zoom level to show US state borders
 const WORLD_COUNTIES_ZOOM_THRESHOLD = 10;  // zoom level to show US county borders
-const MAX_ZOOM = 50;                        // max zoom for all maps
+const MAX_ZOOM = 8192;                      // max zoom for all maps (scaleExtent upper bound)
+const MAP_FIT_PADDING = 20;                   // must match fitSize([width - pad, height - pad], …)
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Preserve geographic center + zoom k when the map SVG is resized (projection refit).
+let mapViewAnchorState = null; // { mapType, width, height, lonLat: [lon, lat], k } | null
+
+function clearMapViewAnchorState() {
+  mapViewAnchorState = null;
+}
+
+function recomputeZoomForResizeIfNeeded(projection, width, height) {
+  if (!mapViewAnchorState) return;
+  if (mapViewAnchorState.mapType !== currentMapType) return;
+  if (!mapViewAnchorState.lonLat) return;
+  if (mapViewAnchorState.width === width && mapViewAnchorState.height === height) return;
+  if (typeof projection.invert !== 'function') return;
+
+  const lonLat = mapViewAnchorState.lonLat;
+  const k = mapViewAnchorState.k;
+  const p = projection(lonLat);
+  if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return;
+
+  // d3.zoom: scale(k) then translate(tx,ty) => apply: [k*x + k*tx, ...]; center anchor p at viewport center
+  currentZoomTransform = d3.zoomIdentity
+    .scale(k)
+    .translate(width / (2 * k) - p[0], height / (2 * k) - p[1]);
+}
+
+// Snapshot viewport center (geo) + zoom k for resize. Must run after every zoom/pan too — otherwise
+// mapViewAnchorState.k stays 1 from the last full render while the user has zoomed interactively.
+function updateMapViewAnchorState(projection, width, height, mapType) {
+  if (typeof projection.invert !== 'function') return;
+  const t = currentZoomTransform || d3.zoomIdentity;
+  const inv = t.invert([width / 2, height / 2]);
+  if (!inv || !Number.isFinite(inv[0]) || !Number.isFinite(inv[1])) return;
+  const lonLat = projection.invert(inv);
+  if (!lonLat || !Number.isFinite(lonLat[0]) || !Number.isFinite(lonLat[1])) return;
+  mapViewAnchorState = {
+    mapType,
+    width,
+    height,
+    lonLat: [lonLat[0], lonLat[1]],
+    k: t.k
+  };
+}
+
+// Prevent browser page zoom when wheeling over the map panel (capture + non-passive).
+let mapPopupWheelCaptureInstalled = false;
+
+function attachMapWheelCapture() {
+  const popup = document.getElementById('map-panel-popup');
+  if (!popup || mapPopupWheelCaptureInstalled) return;
+  mapPopupWheelCaptureInstalled = true;
+  // preventDefault only — do not stopPropagation or wheel never reaches the SVG for d3.zoom
+  const handler = (e) => { e.preventDefault(); };
+  popup.addEventListener('wheel', handler, { passive: false, capture: true });
+}
 
 // Detect if dataset has FIPS code column
 function detectFIPSColumn() {
@@ -412,6 +468,7 @@ async function renderLatLongMap(svgElement, width, height) {
   // Reset zoom if switching to a different map type
   if (currentMapType !== 'latlong') {
     currentZoomTransform = null;
+    clearMapViewAnchorState();
     currentMapType = 'latlong';
   }
   
@@ -420,7 +477,7 @@ async function renderLatLongMap(svgElement, width, height) {
   
   const countries = topojson.feature(mapData, mapData.objects.countries);
   const projection = d3.geoNaturalEarth1()
-    .fitSize([width - 20, height - 20], countries);
+    .fitSize([width - MAP_FIT_PADDING, height - MAP_FIT_PADDING], countries);
   const path = d3.geoPath().projection(projection);
   
   // Background
@@ -592,7 +649,8 @@ async function renderLatLongMap(svgElement, width, height) {
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
       currentZoomTransform = event.transform;
-      
+      updateMapViewAnchorState(projection, width, height, 'latlong');
+
       // Keep dots constant size by inversely scaling them
       const scale = event.transform.k;
       circles
@@ -602,17 +660,20 @@ async function renderLatLongMap(svgElement, width, height) {
       // Show/hide overlays based on zoom level
       applyOverlayVisibility(scale, usStatesOverlay, usCountiesOverlay);
     });
-  
+
+  recomputeZoomForResizeIfNeeded(projection, width, height);
+
   svg.call(zoom);
 
-  // Apply initial overlay visibility
   const initialTransform = currentZoomTransform || d3.zoomIdentity;
   applyOverlayVisibility(initialTransform.k, usStatesOverlay, usCountiesOverlay);
 
-  // Restore previous zoom state if it exists
   if (currentZoomTransform) {
     svg.call(zoom.transform, currentZoomTransform);
   }
+
+  attachMapWheelCapture();
+  updateMapViewAnchorState(projection, width, height, 'latlong');
 }
 
 // Render world countries map (reuses same structure as US map)
@@ -632,6 +693,7 @@ async function renderWorldMap(svgElement, width, height) {
   // Reset zoom if switching to a different map type
   if (currentMapType !== 'world') {
     currentZoomTransform = null;
+    clearMapViewAnchorState();
     currentMapType = 'world';
   }
   
@@ -640,7 +702,7 @@ async function renderWorldMap(svgElement, width, height) {
   
   const countries = topojson.feature(mapData, mapData.objects.countries);
   const projection = d3.geoNaturalEarth1()
-    .fitSize([width - 20, height - 20], countries);
+    .fitSize([width - MAP_FIT_PADDING, height - MAP_FIT_PADDING], countries);
   const path = d3.geoPath().projection(projection);
   
   svg.append('rect')
@@ -815,6 +877,7 @@ async function renderWorldMap(svgElement, width, height) {
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
       currentZoomTransform = event.transform;
+      updateMapViewAnchorState(projection, width, height, 'world');
 
       // Keep country stroke width constant (overlay strokes handled by vector-effect)
       const scale = event.transform.k;
@@ -824,16 +887,19 @@ async function renderWorldMap(svgElement, width, height) {
       applyOverlayVisibility(scale, usStatesOverlay, usCountiesOverlay);
     });
 
+  recomputeZoomForResizeIfNeeded(projection, width, height);
+
   svg.call(zoom);
 
-  // Apply initial overlay visibility for the case where the map re-renders at an existing zoom level
   const initialTransform = currentZoomTransform || d3.zoomIdentity;
   applyOverlayVisibility(initialTransform.k, usStatesOverlay, usCountiesOverlay);
-  
-  // Restore previous zoom state if it exists
+
   if (currentZoomTransform) {
     svg.call(zoom.transform, currentZoomTransform);
   }
+
+  attachMapWheelCapture();
+  updateMapViewAnchorState(projection, width, height, 'world');
 }
 
 // Render the US counties map
@@ -847,6 +913,7 @@ async function renderUSMap(svgElement, width, height) {
   // Reset zoom if switching to a different map type
   if (currentMapType !== 'us') {
     currentZoomTransform = null;
+    clearMapViewAnchorState();
     currentMapType = 'us';
   }
   
@@ -859,7 +926,7 @@ async function renderUSMap(svgElement, width, height) {
   
   // Create projection
   const projection = d3.geoAlbersUsa()
-    .fitSize([width - 20, height - 20], counties);
+    .fitSize([width - MAP_FIT_PADDING, height - MAP_FIT_PADDING], counties);
   
   const path = d3.geoPath().projection(projection);
   
@@ -944,19 +1011,24 @@ async function renderUSMap(svgElement, width, height) {
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
       currentZoomTransform = event.transform;
-      
+      updateMapViewAnchorState(projection, width, height, 'us');
+
       // Keep stroke widths constant by inversely scaling them
       const scale = event.transform.k;
       countyPaths.attr('stroke-width', 0.3 / scale);
       statePaths.attr('stroke-width', 1 / scale);
     });
-  
+
+  recomputeZoomForResizeIfNeeded(projection, width, height);
+
   svg.call(zoom);
-  
-  // Restore previous zoom state if it exists
+
   if (currentZoomTransform) {
     svg.call(zoom.transform, currentZoomTransform);
   }
+
+  attachMapWheelCapture();
+  updateMapViewAnchorState(projection, width, height, 'us');
 }
 
 // Main render function for the map panel
@@ -990,7 +1062,7 @@ async function renderMapPanel() {
   
   const width = parseInt(svg.getAttribute('width')) || 500;
   const height = parseInt(svg.getAttribute('height')) || 400;
-  
+
   // Render based on available columns (lat/long has highest priority)
   if (latLongCols) {
     await renderLatLongMap(svg, width, height);

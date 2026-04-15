@@ -107,7 +107,6 @@
   --text-transform-dataset-option:     none;
   --text-transform-file-upload:        none;
   --text-transform-country-name:       none;
-  --text-transform-map-popup:          none;
 }
 
 /* =========================================================
@@ -211,7 +210,4 @@ h2 {
 .country-name,
 .instructions {
   text-transform: var(--text-transform-country-name) !important;
-}
-.map-popup-header span {
-  text-transform: var(--text-transform-map-popup) !important;
 }

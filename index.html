@@ -185,6 +185,7 @@
           <option value="country-development" selected>Country Development Indicators</option>
           <option value="us-counties">Georgia County Indicators</option>
           <option value="colleges">Colleges</option>
+          <option value="nsa-names-atl">NSA Names (Atlanta variables)</option>
           <option value="custom">Custom Dataset</option>
         </select>
         <a
@@ -206,11 +207,12 @@
     <div class="header-center">
       <div class="header-title">
         <h1 id="app-title">Factxis</h1>
-        <span class="header-divider"></span>
-        <h2>Visualization By Percentile</h2>
+        <span class="header-divider" aria-hidden="true"></span>
+        <h2 class="header-subtitle">Visualization By Percentile</h2>
       </div>
     </div>
     <div class="header-right">
+      <button type="button" id="header-about-btn" class="header-about-btn">About</button>
     </div>
   </div>
   
@@ -244,9 +246,6 @@
         
         <!-- Map Panel Popup (resizable) -->
         <div id="map-panel-popup" class="map-popup" style="display: none;">
-          <div class="map-popup-header" id="map-popup-header">
-            <button class="map-popup-close" id="map-popup-close">Ã—</button>
-          </div>
           <div class="map-popup-content">
             <svg id="map-svg" width="380" height="300"></svg>
           </div>
@@ -271,8 +270,41 @@
     </div>
   </div>
 
+  <!-- Column cap dialog (custom uploads with many columns) -->
+  <div id="column-cap-dialog" class="modal-overlay" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Select columns to visualize (max 30)</h3>
+      </div>
+      <div class="modal-body">
+        <div class="column-list" id="column-cap-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="column-cap-cancel" class="modal-btn modal-btn-cancel">Cancel</button>
+        <button id="column-cap-ok" class="modal-btn modal-btn-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- About dialog (body filled from ABOUT_MARKDOWN in the main script below) -->
+  <div id="about-dialog" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="about-dialog-title">
+    <div class="modal-dialog about-dialog">
+      <div class="modal-header modal-header--with-actions">
+        <h3 id="about-dialog-title">About</h3>
+        <button type="button" id="about-close-x" class="modal-close-btn" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body about-dialog-body">
+        <div id="about-markdown" class="about-markdown-content"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="about-close-btn" class="modal-btn modal-btn-ok">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Include SheetJS library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
   <script src="fonts.js"></script>
   
   <!-- Load SimilarityIndex for finding similar records -->
@@ -306,6 +338,56 @@
   <script src="views/box-whisker.js"></script>
 
   <script>
+    // ---------------------------------------------------------------------------
+    // About popup — edit the Markdown below (supports **bold**, [links](url), lists, headings, etc.)
+    // Find this block: search for "ABOUT_MARKDOWN" in percentile-based-viz/index.html
+    // ---------------------------------------------------------------------------
+    const ABOUT_MARKDOWN = [
+      'Factxis is a tool developed in the Friendly Cities Research Lab at Georgia Tech under the supervision of Prof. Clio Andris. Development is ongoing and primarily developed by Colin Vu.',
+      '',
+      'Factxis is an open-source, interactive, browser-based visualization system that supports percentile-based comparison of "indicators" across high-dimensional datasets. Using the tool, users can compare how data points "rank" against other data in the dataset across every attribute. There are two main panes: one that visualizes each data attribute, ranked, and one that visualizes all the data for a selected attribute in a beeswarm plot.',
+      '',
+      'By using percentile-based ranking, the system transforms complex, high-dimensional data into a prioritized list of "relative facts" that are immediately actionable and easy to communicate. Users can easily identify what makes particular data points "special," and they can identify anomalies in data distributions in order to investigate related attributes.',
+      '',
+      'For any questions or feedback about the tool, please contact Dr. Clio Andris at clio@gatech.edu.',
+
+    ].join('\n');
+
+    function openAboutDialog() {
+      const overlay = document.getElementById('about-dialog');
+      const target = document.getElementById('about-markdown');
+      if (!overlay || !target) return;
+      if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+        target.innerHTML = marked.parse(ABOUT_MARKDOWN, { mangle: false, headerIds: false });
+      } else {
+        target.textContent = ABOUT_MARKDOWN;
+      }
+      overlay.style.display = 'flex';
+    }
+
+    function closeAboutDialog() {
+      const overlay = document.getElementById('about-dialog');
+      if (overlay) overlay.style.display = 'none';
+    }
+
+    function setupAboutDialog() {
+      const overlay = document.getElementById('about-dialog');
+      const openBtn = document.getElementById('header-about-btn');
+      const closeBtn = document.getElementById('about-close-btn');
+      const closeX = document.getElementById('about-close-x');
+      if (openBtn) openBtn.addEventListener('click', openAboutDialog);
+      if (closeBtn) closeBtn.addEventListener('click', closeAboutDialog);
+      if (closeX) closeX.addEventListener('click', closeAboutDialog);
+      if (overlay) {
+        overlay.addEventListener('click', function(e) {
+          if (e.target === overlay) closeAboutDialog();
+        });
+      }
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && overlay && overlay.style.display === 'flex') closeAboutDialog();
+      });
+    }
+
     // Initialize the application
     document.addEventListener('DOMContentLoaded', function() {
       console.log('[INIT] DOMContentLoaded fired');
@@ -330,6 +412,7 @@
       
       // Setup event listeners
       setupEventListeners();
+      setupAboutDialog();
       
       // Initialize for category-final mode (Faxis)
       const pctContainer = document.getElementById('percentile-scroll-container');
@@ -401,7 +484,8 @@
       const builtIn = {
         'country-development': { href: 'CountryDevelopmentIndicators_withcode.xlsx', filename: 'CountryDevelopmentIndicators_withcode.xlsx' },
         'us-counties': { href: 'georgia-county-indicators.xlsx', filename: 'georgia-county-indicators.xlsx' },
-        'colleges': { href: 'colleges.xlsx', filename: 'colleges.xlsx' }
+        'colleges': { href: 'colleges.xlsx', filename: 'colleges.xlsx' },
+        'nsa-names-atl': { href: 'NSA_Names_AllVariables_atl.xlsx', filename: 'NSA_Names_AllVariables_atl.xlsx' }
       };
 
       if (selected === 'custom') {
@@ -897,9 +981,14 @@
       function refreshTextEncodingDropdown() {
         if (!textEncodingSelect) return;
         // Get ALL columns from the dataset
-        const columns = window.appState.jsonData && window.appState.jsonData.length > 0
+        let columns = window.appState.jsonData && window.appState.jsonData.length > 0
           ? Object.keys(window.appState.jsonData[0])
           : [];
+        const allow = window.appState.customVizColumnAllowlist;
+        if (Array.isArray(allow) && allow.length > 0) {
+          const allowSet = new Set(allow);
+          columns = columns.filter(c => allowSet.has(c));
+        }
         
         textEncodingSelect.innerHTML = '';
         
@@ -1563,6 +1652,9 @@
       document.getElementById('file-input').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
+        window.appState.selectedDataColumn = null;
+        window.appState.customVizColumnAllowlist = null;
+        window.appState.presetDatasetId = null;
         
         // Truncate filename to 20 characters with ellipsis if longer
         const fileName = file.name.length > 20 ? file.name.substring(0, 20) + '...' : file.name;
@@ -2077,7 +2169,6 @@
       });
     }
     
-      // Column Selection Dialog
       function showColumnSelectionDialog() {
         if (!window.appState.jsonData || window.appState.jsonData.length === 0) {
           window.processData();
@@ -2144,109 +2235,85 @@
       }
       
       function confirmColumnSelection(columnName) {
-        // Store the selected column in appState
         window.appState.selectedDataColumn = columnName;
-        
-        // Process the data with the selected column
-        // Show column selection dialog for custom datasets
-        showColumnSelectionDialog();
-        
-        // Hide loading indicator
+        const eligible = typeof window.getEligibleCustomVizColumns === 'function'
+          ? window.getEligibleCustomVizColumns(columnName)
+          : [];
+        if (eligible.length > 30) {
+          showColumnCapDialog(eligible);
+          return;
+        }
+        window.appState.customVizColumnAllowlist = null;
+        window.processData();
         document.querySelector('.loading').style.display = 'none';
       }
 
-      // Column Selection Dialog Functions
-      function showColumnSelectionDialog() {
-        if (!window.appState.jsonData || window.appState.jsonData.length === 0) {
+      function showColumnCapDialog(eligible) {
+        const dialog = document.getElementById('column-cap-dialog');
+        const listContainer = document.getElementById('column-cap-list');
+        const okBtn = document.getElementById('column-cap-ok');
+        const cancelBtn = document.getElementById('column-cap-cancel');
+        if (!dialog || !listContainer || !okBtn || !cancelBtn) {
+          window.appState.customVizColumnAllowlist = null;
           window.processData();
+          document.querySelector('.loading').style.display = 'none';
           return;
         }
-        
-        const columns = Object.keys(window.appState.jsonData[0]);
-        const dialog = document.getElementById('column-selection-dialog');
-        const listContainer = document.getElementById('column-selection-list');
-        const okBtn = document.getElementById('column-selection-ok');
-        const cancelBtn = document.getElementById('column-selection-cancel');
-        
-        // Clear previous list
         listContainer.innerHTML = '';
-        
-        // Populate column list
-        let selectedColumn = null;
-        columns.forEach(column => {
+        const preselected = new Set(eligible.slice(0, 30));
+
+        function countSelected() {
+          return listContainer.querySelectorAll('.column-list-item.selected').length;
+        }
+        function updateOkEnabled() {
+          const n = countSelected();
+          okBtn.disabled = n < 1 || n > 30;
+        }
+
+        eligible.forEach(column => {
           const item = document.createElement('div');
           item.className = 'column-list-item';
+          if (preselected.has(column)) item.classList.add('selected');
           item.textContent = column;
           item.dataset.column = column;
-          
-          // Single click to select
           item.addEventListener('click', function() {
-            // Remove previous selection
-            listContainer.querySelectorAll('.column-list-item').forEach(i => i.classList.remove('selected'));
-            // Add selection to this item
-            this.classList.add('selected');
-            selectedColumn = this.dataset.column;
-            okBtn.disabled = false;
+            if (this.classList.contains('selected')) {
+              this.classList.remove('selected');
+            } else {
+              if (countSelected() >= 30) return;
+              this.classList.add('selected');
+            }
+            updateOkEnabled();
           });
-          
-          // Double click to select and confirm
-          item.addEventListener('dblclick', function() {
-            selectedColumn = this.dataset.column;
-            confirmColumnSelection(selectedColumn);
-            dialog.style.display = 'none';
-          });
-          
           listContainer.appendChild(item);
         });
-        
-        // Disable OK button initially
-        okBtn.disabled = true;
-        
-        // OK button handler
+
+        updateOkEnabled();
+
         okBtn.onclick = function() {
-          if (selectedColumn) {
-            confirmColumnSelection(selectedColumn);
-            dialog.style.display = 'none';
-          }
-        };
-        
-        // Cancel button handler
-        cancelBtn.onclick = function() {
+          const n = countSelected();
+          if (n < 1 || n > 30) return;
+          const selectedSet = new Set(
+            Array.from(listContainer.querySelectorAll('.column-list-item.selected')).map(el => el.dataset.column)
+          );
+          window.appState.customVizColumnAllowlist = eligible.filter(col => selectedSet.has(col));
           dialog.style.display = 'none';
-          // Hide loading indicator
+          window.processData();
           document.querySelector('.loading').style.display = 'none';
         };
-        
-        // Show dialog
+
+        cancelBtn.onclick = function() {
+          dialog.style.display = 'none';
+          document.querySelector('.loading').style.display = 'none';
+        };
+
         dialog.style.display = 'flex';
-      }
-      
-      function confirmColumnSelection(columnName) {
-        // Store the selected column in appState
-        window.appState.selectedDataColumn = columnName;
-        
-        // Process the data with the selected column
-        window.processData();
-        
-        // Hide loading indicator
-        document.querySelector('.loading').style.display = 'none';
       }
 
       // Make map popup resizable
     const mapPopup = document.getElementById('map-panel-popup');
-    const mapPopupClose = document.getElementById('map-popup-close');
     
     if (mapPopup) {
-      // Close button functionality
-      if (mapPopupClose) {
-        mapPopupClose.addEventListener('click', function() {
-          mapPopup.style.display = 'none';
-          window.appState.finalViewMapMode = false;
-          const mapCheckbox = document.getElementById('map-mode-checkbox');
-          if (mapCheckbox) mapCheckbox.checked = false;
-        });
-      }
-      
       // Add resize handle
       const resizeHandle = document.createElement('div');
       resizeHandle.className = 'map-resize-handle';
@@ -2284,7 +2351,7 @@
         // Update SVG size
         const svg = document.getElementById('map-svg');
         if (svg) {
-          const headerHeight = 30;
+          const headerHeight = 0;
           const padding = 20;
           svg.setAttribute('width', newWidth - padding);
           svg.setAttribute('height', newHeight - headerHeight - padding);

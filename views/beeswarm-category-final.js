@@ -715,6 +715,39 @@ function isSelectionEncodingMode() {
          window.appState.viewMode === 'category-final';
 }
 
+function buildBeeswarmTooltipParts(d, metricKey, options) {
+  const {
+    hasEncodingField,
+    encodingLabel,
+    hasTextEncoding,
+    textEncodingField,
+    colorCtx
+  } = options;
+  const htmlParts = [
+    d.data.label,
+    `Value: ${window.formatValue(d.data.value, metricKey)}`,
+    `Percentile: ${d.data.percentile}%`
+  ];
+
+  if (hasEncodingField) {
+    if (colorCtx && colorCtx.isClusterMode && d.data.row && typeof colorCtx.getClusterInfoForRow === 'function') {
+      const info = colorCtx.getClusterInfoForRow(d.data.row);
+      if (info) {
+        htmlParts.push(`Cluster: ${info.clusterNumber}`);
+        htmlParts.push(`Distance to center: ${info.distance.toFixed(2)}`);
+      }
+    } else {
+      htmlParts.push(`${encodingLabel || 'Category'}: ${d.data.category}`);
+    }
+  }
+
+  if (hasTextEncoding) {
+    htmlParts.push(`${window.formatMetricName(textEncodingField)}: ${d.data.textValue}`);
+  }
+
+  return htmlParts;
+}
+
 // Original beeswarm rendering
 function renderBeeswarmCategoryFinalActual(metricKey) {
   console.log('>>> renderBeeswarmCategoryFinalActual called with metricKey:', metricKey);
@@ -739,7 +772,9 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   const encodingField = colorCtx ? colorCtx.encodingField : window.appState.categoryEncodedField;
   const hasEncodingField = colorCtx ? colorCtx.hasEncodingField : false;
   const fallbackCategory = colorCtx ? colorCtx.fallbackCategory : 'All items';
-  const encodingLabel = encodingField ? window.formatMetricName(encodingField) : 'Group';
+  const encodingLabel = colorCtx
+    ? (colorCtx.encodingLabel || (encodingField ? window.formatMetricName(encodingField) : 'Group'))
+    : (encodingField ? window.formatMetricName(encodingField) : 'Group');
 
   // Check for text encoding field
   const textEncodingField = window.appState.categoryTextEncodedField;
@@ -776,7 +811,8 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
         value: v,
         category: categoryValue,
         rawCategory,
-        textValue: textValue
+        textValue: textValue,
+        row: d
       };
     })
     .filter(Boolean);
@@ -784,6 +820,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   if (values.length === 0) {
     svg.selectAll('*').remove();
     window.appState.previousBeeswarmNodes = [];
+    window.appState.beeswarmColorScale = null;
     return;
   }
 
@@ -809,7 +846,10 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
 
   svg.selectAll('*').remove();
 
-  const categories = Array.from(new Set(withPct.map(d => d.category))).filter(Boolean);
+  let categories = Array.from(new Set(withPct.map(d => d.category))).filter(Boolean);
+  if (colorCtx && colorCtx.isClusterMode && window.appState.clusterResult && Array.isArray(window.appState.clusterResult.labels)) {
+    categories = colorCtx.sortCategories(window.appState.clusterResult.labels);
+  }
   if (categories.length === 0) {
     categories.push(fallbackCategory);
   }
@@ -818,6 +858,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   const colorScale = colorCtx
     ? colorCtx.buildColorScale(categories)
     : d3.scaleOrdinal().domain([fallbackCategory]).range(['#4f46e5']);
+  window.appState.beeswarmColorScale = colorScale;
 
   // Function to get the actual fill color for a data point
   function getDotColor(d) {
@@ -1018,20 +1059,15 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
     window.appState.previousBeeswarmNodes = nodes.map(n => ({ ...n }));
     
     // Add interaction handlers to text elements
-    const groupLabel = hasEncodingField ? encodingLabel : 'Category';
     allTexts
       .on('mouseenter', function(evt, d) {
-        const htmlParts = [
-          d.data.label,
-          `Value: ${window.formatValue(d.data.value, metricKey)}`,
-          `Percentile: ${d.data.percentile}%`
-        ];
-        if (hasEncodingField) {
-          htmlParts.push(`${groupLabel}: ${d.data.category}`);
-        }
-        if (hasTextEncoding) {
-          htmlParts.push(`${window.formatMetricName(textEncodingField)}: ${d.data.textValue}`);
-        }
+        const htmlParts = buildBeeswarmTooltipParts(d, metricKey, {
+          hasEncodingField,
+          encodingLabel,
+          hasTextEncoding,
+          textEncodingField,
+          colorCtx
+        });
         // Smart positioning: if tooltip would be hidden by header (first ~80px), show it below cursor instead
         const tooltipTop = evt.offsetY - 48;
         const adjustedTop = tooltipTop < 80 ? evt.offsetY + 20 : tooltipTop;
@@ -1218,17 +1254,15 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
 
   window.appState.previousBeeswarmNodes = nodes.map(n => ({ ...n }));
 
-  const groupLabel = hasEncodingField ? encodingLabel : 'Category';
   allCircles
     .on('mouseenter', function(evt, d) {
-      const htmlParts = [
-        d.data.label,
-        `Value: ${window.formatValue(d.data.value, metricKey)}`,
-        `Percentile: ${d.data.percentile}%`
-      ];
-      if (hasEncodingField) {
-        htmlParts.push(`${groupLabel}: ${d.data.category}`);
-      }
+      const htmlParts = buildBeeswarmTooltipParts(d, metricKey, {
+        hasEncodingField,
+        encodingLabel,
+        hasTextEncoding,
+        textEncodingField,
+        colorCtx
+      });
       // Smart positioning: if tooltip would be hidden by header (first ~80px), show it below cursor instead
       const tooltipTop = evt.offsetY - 48;
       const adjustedTop = tooltipTop < 80 ? evt.offsetY + 20 : tooltipTop;
@@ -1402,7 +1436,9 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
 
   if (hasEncodingField && categories.length > 0) {
     const maxLegendItems = 16;
-    const legendCategories = categories.slice(0, maxLegendItems);
+    const legendCategories = colorCtx && colorCtx.isClusterMode && typeof colorCtx.getLegendCategories === 'function'
+      ? colorCtx.getLegendCategories().slice(0, maxLegendItems)
+      : categories.slice(0, maxLegendItems);
     const legend = svg.append('g').attr('class', 'encoded-legend');
     const legendX = (width - plotPaddingRight) - 110;
     let legendY = plotPaddingTop + 12;
@@ -1418,7 +1454,9 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
     legendCategories.forEach((cat, idx) => {
       const rowY = legendY + idx * 16;
       const row = legend.append('g').attr('transform', `translate(0, ${rowY})`);
-      const originalColor = colorScale(cat);
+      const originalColor = colorCtx && colorCtx.isClusterMode && typeof colorCtx.getLegendCategoryColor === 'function'
+        ? colorCtx.getLegendCategoryColor(cat)
+        : colorScale(cat);
       row.append('rect')
         .attr('x', legendX)
         .attr('y', -9)

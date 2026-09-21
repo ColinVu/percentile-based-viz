@@ -365,6 +365,17 @@ function processData() {
   
   // Reset derived data cache when dataset changes
   window.appState.derivedDataCache = { computed: false, records: [] };
+
+  // Reset cluster assignments when dataset changes
+  if (typeof window.resetClusterResult === 'function') {
+    window.resetClusterResult();
+  }
+  if (typeof window.initializeClusterConfigFromDataset === 'function') {
+    window.initializeClusterConfigFromDataset();
+  }
+  if (typeof window.syncClusterRowIndices === 'function') {
+    window.syncClusterRowIndices();
+  }
   
   // Reset selection table when dataset changes
   window.appState.selectionModeLocations = [];
@@ -485,6 +496,12 @@ function processData() {
   }
   if (typeof window.refreshTextEncodingDropdown === 'function') {
     window.refreshTextEncodingDropdown();
+  }
+  if (typeof window.refreshClusterFeaturesList === 'function') {
+    window.refreshClusterFeaturesList();
+  }
+  if (window.appState.encodingMode === 'cluster' && typeof window.computeClusters === 'function') {
+    window.computeClusters();
   }
   
   if (window.appState.selectedCountry) {

@@ -90,6 +90,10 @@
             <input type="radio" name="encodingMode" value="feature">
             <span>Color by Feature</span>
           </label>
+          <label class="encoding-mode-option">
+            <input type="radio" name="encodingMode" value="cluster">
+            <span>Color by Cluster (Experimental)</span>
+          </label>
         </div>
       </div>
 
@@ -127,6 +131,30 @@
         <select id="encodedColorSelect">
           <option value="">Categorical column not available</option>
         </select>
+      </div>
+
+      <div class="control-section" id="cluster-encoding-section" style="display: none;">
+        <h3>Cluster Settings</h3>
+        <div class="cluster-control-row">
+          <label for="clusterCountSlider">Clusters: <span id="clusterCountValue">4</span></label>
+          <input type="range" id="clusterCountSlider" min="2" max="8" value="4" step="1">
+        </div>
+        <div class="cluster-control-row">
+          <label for="clusterScalingSelect">Scaling</label>
+          <select id="clusterScalingSelect">
+            <option value="percentile" selected>Percentile / rank</option>
+            <option value="robust">Robust z-score</option>
+            <option value="standard">Standard z-score</option>
+          </select>
+        </div>
+        <div class="cluster-features-header">
+          <span>Features</span>
+          <div class="cluster-features-actions">
+            <button type="button" id="clusterFeaturesSelectAll" class="cluster-features-action-btn">Select all</button>
+            <button type="button" id="clusterFeaturesClearAll" class="cluster-features-action-btn">Clear all</button>
+          </div>
+        </div>
+        <div class="cluster-features-list" id="clusterFeaturesList"></div>
       </div>
 
       <div class="control-section" id="text-encoding-section" style="display: none;">
@@ -332,6 +360,7 @@
   
   <!-- Load modular view components -->
   <script src="views/shared.js"></script>
+  <script src="views/clustering.js"></script>
   <script src="views/data-loader.js"></script>
   <script src="views/percentile-scroll.js"></script>
   <script src="views/location-identifier.js"></script>
@@ -924,6 +953,13 @@
       const locationSection = document.getElementById('location-section');
       const encodedSection = document.getElementById('encoded-color-section');
       const encodedSelect = document.getElementById('encodedColorSelect');
+      const clusterSection = document.getElementById('cluster-encoding-section');
+      const clusterCountSlider = document.getElementById('clusterCountSlider');
+      const clusterCountValue = document.getElementById('clusterCountValue');
+      const clusterScalingSelect = document.getElementById('clusterScalingSelect');
+      const clusterFeaturesList = document.getElementById('clusterFeaturesList');
+      const clusterFeaturesSelectAllBtn = document.getElementById('clusterFeaturesSelectAll');
+      const clusterFeaturesClearAllBtn = document.getElementById('clusterFeaturesClearAll');
       const textEncodingSection = document.getElementById('text-encoding-section');
       const textEncodingSelect = document.getElementById('textEncodingSelect');
       const multiSelectSection = document.getElementById('multi-select-section');
@@ -1052,6 +1088,79 @@
         filterSelectSection.style.display = show ? 'block' : 'none';
         if (show && typeof window.filterSelectRenderControls === 'function') {
           window.filterSelectRenderControls();
+        }
+      }
+
+      function syncClusterControlsFromState() {
+        const config = typeof window.ensureClusterConfig === 'function'
+          ? window.ensureClusterConfig()
+          : (window.appState.clusterConfig || { k: 4, scaling: 'percentile' });
+        if (clusterCountSlider) clusterCountSlider.value = String(config.k || 4);
+        if (clusterCountValue) clusterCountValue.textContent = String(config.k || 4);
+        if (clusterScalingSelect) clusterScalingSelect.value = config.scaling || 'percentile';
+      }
+
+      function refreshClusterFeaturesList() {
+        if (!clusterFeaturesList || typeof window.getEligibleClusterFeatures !== 'function') return;
+        const config = typeof window.ensureClusterConfig === 'function'
+          ? window.ensureClusterConfig()
+          : window.appState.clusterConfig;
+        const eligible = window.getEligibleClusterFeatures();
+        const selected = new Set(Array.isArray(config.featureColumns) ? config.featureColumns : []);
+        clusterFeaturesList.innerHTML = '';
+
+        if (eligible.length === 0) {
+          const emptyMsg = document.createElement('div');
+          emptyMsg.className = 'cluster-features-empty';
+          emptyMsg.textContent = 'No numeric features available for clustering.';
+          clusterFeaturesList.appendChild(emptyMsg);
+          return;
+        }
+
+        eligible.forEach(col => {
+          const row = document.createElement('label');
+          row.className = 'cluster-feature-option';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = col;
+          checkbox.checked = selected.has(col);
+          const label = document.createElement('span');
+          label.textContent = window.formatMetricName ? window.formatMetricName(col) : col;
+          row.appendChild(checkbox);
+          row.appendChild(label);
+          clusterFeaturesList.appendChild(row);
+        });
+      }
+
+      function getSelectedClusterFeaturesFromUI() {
+        if (!clusterFeaturesList) return [];
+        return Array.from(clusterFeaturesList.querySelectorAll('input[type="checkbox"]:checked'))
+          .map(input => input.value);
+      }
+
+      function recomputeClustersAndRender() {
+        const config = typeof window.ensureClusterConfig === 'function'
+          ? window.ensureClusterConfig()
+          : window.appState.clusterConfig;
+        if (clusterCountSlider) config.k = Number(clusterCountSlider.value) || 4;
+        if (clusterScalingSelect) config.scaling = clusterScalingSelect.value || 'percentile';
+        config.featureColumns = getSelectedClusterFeaturesFromUI();
+
+        if (typeof window.computeClusters === 'function') {
+          window.computeClusters();
+        }
+
+        if (window.appState.viewMode === 'category-final' && window.appState.categorySelectedMetricKey &&
+            typeof window.renderBeeswarmCategoryFinal === 'function') {
+          window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+        }
+        if (window.appState.viewMode === 'category-final' && typeof window.renderMapPanel === 'function') {
+          const mapPopup = document.getElementById('map-panel-popup');
+          if (mapPopup && mapPopup.style.display !== 'none') {
+            requestAnimationFrame(function() {
+              window.renderMapPanel();
+            });
+          }
         }
       }
       
@@ -1398,6 +1507,7 @@
           }
           if (locationSection) locationSection.style.display = 'none';
           if (encodedSection) encodedSection.style.display = 'none';
+          if (clusterSection) clusterSection.style.display = 'none';
           if (textEncodingSection) textEncodingSection.style.display = 'none';
           
           // Set encodings to None
@@ -1414,9 +1524,27 @@
             encodedSection.style.display = 'block';
             refreshEncodedColorDropdown();
           }
+          if (clusterSection) clusterSection.style.display = 'none';
           if (textEncodingSection) {
             textEncodingSection.style.display = 'block';
             refreshTextEncodingDropdown();
+          }
+        } else if (mode === 'cluster') {
+          if (selectionTableSection) selectionTableSection.style.display = 'none';
+          if (locationSection) locationSection.style.display = 'block';
+          if (encodedSection) encodedSection.style.display = 'none';
+          if (textEncodingSection) textEncodingSection.style.display = 'none';
+          if (clusterSection) {
+            clusterSection.style.display = 'block';
+            syncClusterControlsFromState();
+            refreshClusterFeaturesList();
+          }
+          window.appState.categoryEncodedField = '';
+          window.appState.categoryTextEncodedField = '';
+          if (encodedSelect) encodedSelect.value = '';
+          if (textEncodingSelect) textEncodingSelect.value = '';
+          if (typeof window.computeClusters === 'function') {
+            window.computeClusters();
           }
         }
         
@@ -1430,9 +1558,13 @@
 
       window.refreshEncodedColorDropdown = refreshEncodedColorDropdown;
       window.refreshTextEncodingDropdown = refreshTextEncodingDropdown;
+      window.refreshClusterFeaturesList = refreshClusterFeaturesList;
+      window.recomputeClustersAndRender = recomputeClustersAndRender;
       window.updateEncodingMode = updateEncodingMode;
       refreshEncodedColorDropdown();
       refreshTextEncodingDropdown();
+      syncClusterControlsFromState();
+      refreshClusterFeaturesList();
       showMultiSelectSection(window.appState.viewMode === 'category-v7');
       showFilterSelectSection(window.appState.viewMode === 'category-v8' || window.appState.viewMode === 'category-final');
       
@@ -1463,6 +1595,47 @@
           if (window.appState.viewMode === 'category-final' && window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
             window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
           }
+        });
+      }
+
+      if (clusterCountSlider) {
+        clusterCountSlider.addEventListener('input', function() {
+          if (clusterCountValue) clusterCountValue.textContent = this.value;
+        });
+        clusterCountSlider.addEventListener('change', function() {
+          recomputeClustersAndRender();
+        });
+      }
+
+      if (clusterScalingSelect) {
+        clusterScalingSelect.addEventListener('change', function() {
+          recomputeClustersAndRender();
+        });
+      }
+
+      if (clusterFeaturesList) {
+        clusterFeaturesList.addEventListener('change', function(evt) {
+          if (evt.target && evt.target.matches('input[type="checkbox"]')) {
+            recomputeClustersAndRender();
+          }
+        });
+      }
+
+      if (clusterFeaturesSelectAllBtn) {
+        clusterFeaturesSelectAllBtn.addEventListener('click', function() {
+          clusterFeaturesList.querySelectorAll('input[type="checkbox"]').forEach(input => {
+            input.checked = true;
+          });
+          recomputeClustersAndRender();
+        });
+      }
+
+      if (clusterFeaturesClearAllBtn) {
+        clusterFeaturesClearAllBtn.addEventListener('click', function() {
+          clusterFeaturesList.querySelectorAll('input[type="checkbox"]').forEach(input => {
+            input.checked = false;
+          });
+          recomputeClustersAndRender();
         });
       }
       

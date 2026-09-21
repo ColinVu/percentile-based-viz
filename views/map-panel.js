@@ -55,9 +55,18 @@ function clearMapViewAnchorState() {
 }
 
 function isFeatureMapSelectionMode() {
-  return window.appState.encodingMode === 'feature' &&
+  return (window.appState.encodingMode === 'feature' || window.appState.encodingMode === 'cluster') &&
          window.appState.viewMode === 'category-final' &&
          !isMissingLabelValue(window.appState.selectedCountry);
+}
+
+function getEncodedColorForRow(row, colorCtx, colorScale) {
+  const ctx = colorCtx || (typeof window.buildFeatureEncodingColorContext === 'function'
+    ? window.buildFeatureEncodingColorContext()
+    : null);
+  if (!ctx || !ctx.hasEncodingField) return '#e2e8f0';
+  const scale = colorScale || window.appState.beeswarmColorScale || ctx.getDefaultColorScale();
+  return ctx.getColorForRow(row, scale);
 }
 
 function syncMapSvgSize(mapContainer, svgElement) {
@@ -598,7 +607,7 @@ async function getCountryCodeForLocation(label) {
   return alpha3ToNumeric.get(countryCode) || null;
 }
 
-function getColorForFIPS(fipsCode) {
+function getColorForFIPS(fipsCode, colorCtx, colorScale) {
   const normalizedFips = normalizeFipsCode(fipsCode);
   if (!normalizedFips) return '#e2e8f0';
 
@@ -616,40 +625,13 @@ function getColorForFIPS(fipsCode) {
     return '#e2e8f0';
   }
 
-  const encodingField = window.appState.categoryEncodedField;
-  if (!encodingField || !window.appState.jsonData) return '#e2e8f0';
-
   const fipsCol = detectFIPSColumn();
   if (!fipsCol) return '#e2e8f0';
 
   const row = window.appState.jsonData.find(r => normalizeFipsCode(r[fipsCol]) === normalizedFips);
   if (!row) return '#e2e8f0';
 
-  const rawCategory = row[encodingField];
-  const fallbackCategory = 'Not specified';
-  let categoryValue = fallbackCategory;
-  if (rawCategory !== undefined && rawCategory !== null && rawCategory !== '..') {
-    const catStr = String(rawCategory).trim();
-    categoryValue = catStr === '' ? fallbackCategory : catStr;
-  }
-
-  const categories = Array.from(new Set(window.appState.jsonData.map(r => {
-    const rc = r[encodingField];
-    if (rc === undefined || rc === null || rc === '..') return fallbackCategory;
-    const cs = String(rc).trim();
-    return cs === '' ? fallbackCategory : cs;
-  })));
-
-  const colorScale = d3.scaleOrdinal()
-    .domain(categories)
-    .range(categories.map((_, idx) => {
-      if (categories.length === 1) return d3.interpolateRainbow(0.35);
-      return d3.interpolateRainbow(idx / categories.length);
-    }));
-
-  const baseColor = colorScale(categoryValue);
-  const overrides = window.appState.beeswarmColorOverrides || {};
-  return overrides[baseColor] || baseColor;
+  return getEncodedColorForRow(row, colorCtx, colorScale);
 }
 
 function applyOverlayVisibility(k, statesGroup, countiesGroup) {
@@ -890,7 +872,9 @@ async function renderLatLongMap(svgElement, width, height, generation) {
     ? window.buildFeatureEncodingColorContext()
     : null;
   const hasEncodingField = colorCtx ? colorCtx.hasEncodingField : false;
-  const featureColorScale = colorCtx && hasEncodingField ? colorCtx.getDefaultColorScale() : null;
+  const featureColorScale = colorCtx && hasEncodingField
+    ? (window.appState.beeswarmColorScale || colorCtx.getDefaultColorScale())
+    : null;
   const defaultDotColor = colorCtx ? colorCtx.getDefaultDotColor() : '#64748b';
 
   const dots = [];
@@ -1024,26 +1008,13 @@ async function renderWorldMap(svgElement, width, height, generation) {
   const countryCodeCol = detectCountryCodeColumn();
   const inSelectionMode = window.appState.encodingMode === 'selection' &&
                           window.appState.viewMode === 'category-final';
-  const encodingField = window.appState.categoryEncodedField;
-  const hasEncodingField = !inSelectionMode && encodingField && window.appState.jsonData.length > 0;
-
-  let colorScale = null;
-  if (hasEncodingField) {
-    const fallbackCategory = 'Not specified';
-    const categories = Array.from(new Set(window.appState.jsonData.map(r => {
-      const rc = r[encodingField];
-      if (rc === undefined || rc === null || rc === '..') return fallbackCategory;
-      const cs = String(rc).trim();
-      return cs === '' ? fallbackCategory : cs;
-    })));
-
-    colorScale = d3.scaleOrdinal()
-      .domain(categories)
-      .range(categories.map((_, idx) => {
-        if (categories.length === 1) return d3.interpolateRainbow(0.35);
-        return d3.interpolateRainbow(idx / categories.length);
-      }));
-  }
+  const colorCtx = typeof window.buildFeatureEncodingColorContext === 'function'
+    ? window.buildFeatureEncodingColorContext()
+    : null;
+  const hasEncodingField = colorCtx ? colorCtx.hasEncodingField : false;
+  const featureColorScale = colorCtx && hasEncodingField
+    ? (window.appState.beeswarmColorScale || colorCtx.getDefaultColorScale())
+    : null;
 
   const colorMap = {};
   const labelMap = {};
@@ -1066,17 +1037,8 @@ async function renderWorldMap(svgElement, width, height, generation) {
         if (selectedLoc) {
           color = selectedLoc.color;
         }
-      } else if (hasEncodingField && colorScale) {
-        const rawCategory = row[encodingField];
-        const fallbackCategory = 'Not specified';
-        let categoryValue = fallbackCategory;
-        if (rawCategory !== undefined && rawCategory !== null && rawCategory !== '..') {
-          const catStr = String(rawCategory).trim();
-          categoryValue = catStr === '' ? fallbackCategory : catStr;
-        }
-        const baseColor = colorScale(categoryValue);
-        const overrides = window.appState.beeswarmColorOverrides || {};
-        color = overrides[baseColor] || baseColor;
+      } else if (hasEncodingField && colorCtx && featureColorScale) {
+        color = colorCtx.getColorForRow(row, featureColorScale);
       }
 
       colorMap[numericCode] = color;
@@ -1213,6 +1175,12 @@ async function renderUSMap(svgElement, width, height, generation) {
   const g = svg.append('g');
   const fipsCol = detectFIPSColumn();
   const countyLabelMap = buildCountyLabelMap(fipsCol);
+  const colorCtx = typeof window.buildFeatureEncodingColorContext === 'function'
+    ? window.buildFeatureEncodingColorContext()
+    : null;
+  const featureColorScale = colorCtx && colorCtx.hasEncodingField
+    ? (window.appState.beeswarmColorScale || colorCtx.getDefaultColorScale())
+    : null;
 
   const countyPaths = styleRegionFillPath(g.append('g')
     .attr('class', 'counties')
@@ -1220,7 +1188,7 @@ async function renderUSMap(svgElement, width, height, generation) {
     .data(counties.features)
     .join('path')
     .attr('d', path)
-    .attr('fill', d => getColorForFIPS(d.id)))
+    .attr('fill', d => getColorForFIPS(d.id, colorCtx, featureColorScale)))
     .on('click', function(evt, d) {
       if (!fipsCol) {
         showMapToast('This dataset has no FIPS code column.');

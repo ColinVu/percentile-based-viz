@@ -29,7 +29,14 @@ window.appState = {
   derivedDataCache: {
     computed: false,
     records: [] // Array of {recordName, hIndexScore, summationScore, outliers, percentiles}
-  }
+  },
+  clusterConfig: {
+    k: 4,
+    scaling: 'percentile', // 'percentile' | 'robust' | 'standard'
+    featureColumns: []
+  },
+  clusterResult: null,
+  beeswarmColorScale: null
 };
 
 /**
@@ -460,7 +467,150 @@ function getEffectiveFeatureColor(originalColor) {
   return overrides[originalColor] || originalColor;
 }
 
+function isClusterEncodingMode() {
+  return window.appState.encodingMode === 'cluster' &&
+    window.appState.viewMode === 'category-final';
+}
+
+function buildClusterEncodingColorContext() {
+  const clusterResult = window.appState.clusterResult;
+  const hasEncodingField = !!(clusterResult && clusterResult.computed);
+  const fallbackCategory = 'Unassigned';
+  const encodingField = 'Cluster';
+  const encodingLabel = 'Cluster';
+  const dataToUse = getFeatureEncodingDataRows();
+  const clusterColors = window.CLUSTER_COLORS || [
+    '#4e79a7', '#f28e2b', '#e15759', '#76b7b2',
+    '#59a14f', '#edc948', '#b07aa1', '#ff9da7'
+  ];
+
+  function getClusterAssignmentForRow(row) {
+    if (!hasEncodingField || !row || !Array.isArray(clusterResult.assignments)) {
+      return null;
+    }
+    const rowIndex = typeof window.getClusterRowIndex === 'function'
+      ? window.getClusterRowIndex(row)
+      : window.appState.jsonData.indexOf(row);
+    if (rowIndex < 0 || rowIndex >= clusterResult.assignments.length) return null;
+    const clusterId = clusterResult.assignments[rowIndex];
+    return typeof window.clusterLabelFromId === 'function'
+      ? window.clusterLabelFromId(clusterId)
+      : `Cluster ${clusterId + 1}`;
+  }
+
+  function getCategoryForRow(row) {
+    return getClusterAssignmentForRow(row) || fallbackCategory;
+  }
+
+  function getClusterInfoForRow(row) {
+    if (!hasEncodingField || !row || !Array.isArray(clusterResult.assignments)) {
+      return null;
+    }
+    const rowIndex = typeof window.getClusterRowIndex === 'function'
+      ? window.getClusterRowIndex(row)
+      : window.appState.jsonData.indexOf(row);
+    if (rowIndex < 0 || rowIndex >= clusterResult.assignments.length) return null;
+    const clusterId = clusterResult.assignments[rowIndex];
+    const label = typeof window.clusterLabelFromId === 'function'
+      ? window.clusterLabelFromId(clusterId)
+      : `Cluster ${clusterId + 1}`;
+    return {
+      clusterNumber: clusterId + 1,
+      clusterLabel: label,
+      distance: clusterResult.distances[rowIndex],
+      clusterSize: clusterResult.clusterSizes[label] || 0
+    };
+  }
+
+  function sortCategories(categories) {
+    return categories.slice().sort((a, b) => {
+      const aMatch = /^Cluster (\d+)$/.exec(a);
+      const bMatch = /^Cluster (\d+)$/.exec(b);
+      if (aMatch && bMatch) return Number(aMatch[1]) - Number(bMatch[1]);
+      if (a === fallbackCategory) return 1;
+      if (b === fallbackCategory) return -1;
+      return a.localeCompare(b);
+    });
+  }
+
+  function buildColorScale(categories) {
+    let cats = Array.from(categories).filter(Boolean);
+    if (cats.length === 0) cats = [fallbackCategory];
+    cats = sortCategories(cats);
+
+    return d3.scaleOrdinal()
+      .domain(cats)
+      .range(cats.map(cat => {
+        if (cat === fallbackCategory) return '#94a3b8';
+        const match = /^Cluster (\d+)$/.exec(cat);
+        if (match) {
+          const idx = Number(match[1]) - 1;
+          return clusterColors[idx % clusterColors.length];
+        }
+        return '#94a3b8';
+      }));
+  }
+
+  function getLegendCategories() {
+    if (!hasEncodingField || !Array.isArray(clusterResult.labels)) return [];
+    return sortCategories(clusterResult.labels).map(label => {
+      const size = clusterResult.clusterSizes[label] || 0;
+      return `${label} (${size})`;
+    });
+  }
+
+  function getLegendCategoryColor(labelWithSize) {
+    const match = /^(Cluster \d+)/.exec(labelWithSize);
+    const label = match ? match[1] : labelWithSize;
+    const scale = buildColorScale([label]);
+    return scale(label);
+  }
+
+  function getCategoriesFromRows(rows) {
+    return Array.from(new Set(rows.map(row => getCategoryForRow(row)))).filter(Boolean);
+  }
+
+  function getDefaultColorScale() {
+    const domain = hasEncodingField && Array.isArray(clusterResult.labels)
+      ? clusterResult.labels
+      : getCategoriesFromRows(dataToUse);
+    return buildColorScale(domain);
+  }
+
+  function getColorForRow(row, colorScale) {
+    const scale = colorScale || getDefaultColorScale();
+    return getEffectiveFeatureColor(scale(getCategoryForRow(row)));
+  }
+
+  return {
+    inSelectionMode: false,
+    isClusterMode: true,
+    encodingField,
+    encodingLabel,
+    hasEncodingField,
+    fallbackCategory,
+    isNumericEncoding: false,
+    quantileBins: null,
+    dataToUse,
+    getCategoryForRow,
+    getClusterInfoForRow,
+    getLegendCategories,
+    getLegendCategoryColor,
+    sortCategories,
+    buildColorScale,
+    getCategoriesFromRows,
+    getDefaultColorScale,
+    getColorForRow,
+    getDefaultDotColor: () => '#64748b',
+    getEffectiveColor: getEffectiveFeatureColor
+  };
+}
+
 function buildFeatureEncodingColorContext() {
+  if (isClusterEncodingMode()) {
+    return buildClusterEncodingColorContext();
+  }
+
   const inSelectionMode = window.appState.encodingMode === 'selection' &&
     window.appState.viewMode === 'category-final';
 
@@ -584,7 +734,9 @@ function buildFeatureEncodingColorContext() {
 
   return {
     inSelectionMode,
+    isClusterMode: false,
     encodingField,
+    encodingLabel: encodingField ? formatMetricName(encodingField) : 'Group',
     hasEncodingField,
     fallbackCategory,
     isNumericEncoding,
@@ -601,6 +753,7 @@ function buildFeatureEncodingColorContext() {
   };
 }
 
+window.isClusterEncodingMode = isClusterEncodingMode;
 window.getFeatureEncodingDataRows = getFeatureEncodingDataRows;
 window.getEffectiveFeatureColor = getEffectiveFeatureColor;
 window.buildFeatureEncodingColorContext = buildFeatureEncodingColorContext;

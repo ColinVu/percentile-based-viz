@@ -3,18 +3,35 @@
  * Shows metrics with toggle between evenly-spaced and distributed positioning
  */
 
+function getCoordinateColumnNames() {
+  const cols = new Set();
+  if (typeof window.detectLatLongColumns === 'function') {
+    const detected = window.detectLatLongColumns();
+    if (detected) {
+      cols.add(detected.lat);
+      cols.add(detected.long);
+    }
+  }
+  if (cols.size > 0 && window.appState.jsonData && window.appState.jsonData.length > 0) {
+    Object.keys(window.appState.jsonData[0]).forEach(col => {
+      const raw = (col || '').toString().trim();
+      if (/^(x|y|lat|latitude|long|longitude)$/i.test(raw)) {
+        cols.add(col);
+      }
+    });
+  }
+  return cols;
+}
+
 function renderCategoryMetricListFinal() {
   const listEl = document.getElementById('indicator-list');
   if (!listEl) return;
+  const coordinateCols = getCoordinateColumnNames();
   // Exclude FIPS code metrics (handle variants: "FIPS_Code", "F I P S Code", "FIPS Code", etc.)
   const metrics = window.getNumericMetrics().filter(m => {
     const norm = (m || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
     if (norm === 'fipscode') return false;
-    // NSA preset: X/Y are map coordinates (see map-panel detectLatLongColumns); hide from metric list only
-    if (window.appState.presetDatasetId === 'nsa-names-atl') {
-      const raw = (m || '').toString().trim();
-      if (/^x$/i.test(raw) || /^y$/i.test(raw)) return false;
-    }
+    if (coordinateCols.has(m)) return false;
     return true;
   });
   listEl.innerHTML = '';

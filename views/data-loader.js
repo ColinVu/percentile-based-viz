@@ -86,10 +86,9 @@ async function loadCountryDevelopmentData() {
 // Load Colleges dataset
 async function loadCollegesData() {
   try {
-    const response = await fetch('colleges.xlsx');
-    const arrayBuffer = await response.arrayBuffer();
-    const data = new Uint8Array(arrayBuffer);
-    const workbook = XLSX.read(data, { type: 'array' });
+    const response = await fetch('colleges.csv');
+    const text = await response.text();
+    const workbook = XLSX.read(text, { type: 'string' });
     
     // Get the first sheet
     const firstSheetName = workbook.SheetNames[0];

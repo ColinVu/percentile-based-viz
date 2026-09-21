@@ -12,19 +12,135 @@ let isLoadingMap = false;
 // Store zoom transforms to preserve zoom state across re-renders
 let currentZoomTransform = null;
 let currentMapType = null; // Track which map is currently displayed
+let mapRenderGeneration = 0;
+let activeMapZoom = null;
+let activeMapSvg = null;
+let mapToastTimeout = null;
+let hoveredRegionKey = null;
+let regionOutlineState = null;
 
 // ── Tweak these to adjust when overlays appear on the world map ──────────────
 const WORLD_STATES_ZOOM_THRESHOLD  = 4;   // zoom level to show US state borders
 const WORLD_COUNTIES_ZOOM_THRESHOLD = 10;  // zoom level to show US county borders
 const MAX_ZOOM = 8192;                      // max zoom for all maps (scaleExtent upper bound)
 const MAP_FIT_PADDING = 20;                   // must match fitSize([width - pad, height - pad], …)
+const MAP_REGION_STROKE = '#ffffff';
+const MAP_REGION_STROKE_WIDTH = 0.5;
+const MAP_REGION_HOVER_STROKE = '#334155';
+const MAP_REGION_HOVER_STROKE_WIDTH = 1.5;
+const MAP_REGION_SELECTED_STROKE = '#0f172a';
+const MAP_REGION_SELECTED_STROKE_WIDTH = 2;
+const DOT_BASE_RADIUS = 4;
+const DOT_HOVER_RADIUS = 6;
+const DOT_SELECTED_EXTRA_RADIUS = 1;
+const DOT_STROKE_WIDTH = 0.75;
+const DOT_SELECTED_STROKE_WIDTH = 1.25;
+const ZOOM_BUTTON_FACTOR = 1.35;
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Preserve geographic center + zoom k when the map SVG is resized (projection refit).
 let mapViewAnchorState = null; // { mapType, width, height, lonLat: [lon, lat], k } | null
 
+function beginMapRender() {
+  mapRenderGeneration += 1;
+  return mapRenderGeneration;
+}
+
+function isMapRenderStale(generation) {
+  return generation !== mapRenderGeneration;
+}
+
 function clearMapViewAnchorState() {
   mapViewAnchorState = null;
+}
+
+function isFeatureMapSelectionMode() {
+  return window.appState.encodingMode === 'feature' &&
+         window.appState.viewMode === 'category-final' &&
+         !isMissingLabelValue(window.appState.selectedCountry);
+}
+
+function syncMapSvgSize(mapContainer, svgElement) {
+  const content = mapContainer?.querySelector('.map-popup-content') || mapContainer;
+  if (!content || !svgElement) {
+    return { width: 500, height: 400 };
+  }
+  const width = Math.max(200, content.clientWidth || 0);
+  const height = Math.max(160, content.clientHeight || 0);
+  svgElement.setAttribute('width', width);
+  svgElement.setAttribute('height', height);
+  return { width, height };
+}
+
+function styleOutlinePath(selection, { hovered = false, selected = false } = {}) {
+  selection
+    .attr('fill', 'none')
+    .attr('pointer-events', 'none')
+    .style('vector-effect', 'non-scaling-stroke');
+
+  if (hovered) {
+    selection
+      .attr('stroke', MAP_REGION_HOVER_STROKE)
+      .attr('stroke-width', MAP_REGION_HOVER_STROKE_WIDTH);
+  } else if (selected) {
+    selection
+      .attr('stroke', MAP_REGION_SELECTED_STROKE)
+      .attr('stroke-width', MAP_REGION_SELECTED_STROKE_WIDTH);
+  } else {
+    selection.attr('stroke', 'none');
+  }
+}
+
+function createRegionOutlineLayers(g, path, getRegionKey) {
+  const outlineLayer = g.append('g')
+    .attr('class', 'map-region-outlines')
+    .attr('pointer-events', 'none');
+
+  return {
+    path,
+    getRegionKey,
+    selectedGroup: outlineLayer.append('g').attr('class', 'map-region-selected-outline'),
+    hoverGroup: outlineLayer.append('g').attr('class', 'map-region-hover-outline')
+  };
+}
+
+function updateSelectedOutlineLayer(outlineState, features, isSelectedFn) {
+  if (!outlineState) return;
+  outlineState.selectedGroup.selectAll('*').remove();
+  if (!isFeatureMapSelectionMode()) return;
+
+  const selectedFeatures = features.filter(isSelectedFn);
+  outlineState.selectedGroup
+    .selectAll('path')
+    .data(selectedFeatures, d => outlineState.getRegionKey(d))
+    .join('path')
+    .attr('d', outlineState.path)
+    .call(selection => styleOutlinePath(selection, { selected: true }));
+}
+
+function updateHoverOutlineLayer(outlineState, feature) {
+  if (!outlineState) return;
+  outlineState.hoverGroup
+    .selectAll('path')
+    .data(feature ? [feature] : [], d => outlineState.getRegionKey(d))
+    .join('path')
+    .attr('d', outlineState.path)
+    .call(selection => styleOutlinePath(selection, { hovered: true }));
+}
+
+function findFeatureByRegionKey(features, getRegionKey, regionKey) {
+  if (!regionKey || !Array.isArray(features)) return null;
+  return features.find(feature => getRegionKey(feature) === regionKey) || null;
+}
+
+function syncRegionOutlineLayers(outlineState, features, isSelectedFn) {
+  if (!outlineState) return;
+  regionOutlineState = outlineState;
+  updateSelectedOutlineLayer(outlineState, features, isSelectedFn);
+  updateHoverOutlineLayer(
+    outlineState,
+    findFeatureByRegionKey(features, outlineState.getRegionKey, hoveredRegionKey)
+  );
 }
 
 function recomputeZoomForResizeIfNeeded(projection, width, height) {
@@ -39,14 +155,11 @@ function recomputeZoomForResizeIfNeeded(projection, width, height) {
   const p = projection(lonLat);
   if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return;
 
-  // d3.zoom: scale(k) then translate(tx,ty) => apply: [k*x + k*tx, ...]; center anchor p at viewport center
   currentZoomTransform = d3.zoomIdentity
     .scale(k)
     .translate(width / (2 * k) - p[0], height / (2 * k) - p[1]);
 }
 
-// Snapshot viewport center (geo) + zoom k for resize. Must run after every zoom/pan too — otherwise
-// mapViewAnchorState.k stays 1 from the last full render while the user has zoomed interactively.
 function updateMapViewAnchorState(projection, width, height, mapType) {
   if (typeof projection.invert !== 'function') return;
   const t = currentZoomTransform || d3.zoomIdentity;
@@ -63,6 +176,299 @@ function updateMapViewAnchorState(projection, width, height, mapType) {
   };
 }
 
+function normalizeFipsCode(value) {
+  if (value === undefined || value === null || value === '..') return null;
+  return String(value).trim().padStart(5, '0');
+}
+
+function normalizeCountryNumericId(value) {
+  if (value === undefined || value === null || value === '') return null;
+  return String(value).trim().padStart(3, '0');
+}
+
+function normalizeAlpha3(value) {
+  if (value === undefined || value === null || value === '..') return null;
+  const normalized = String(value).trim().toUpperCase();
+  return normalized === '' ? null : normalized;
+}
+
+function isMissingLabelValue(value) {
+  if (value === undefined || value === null) return true;
+  if (value === '..') return true;
+  if (typeof value === 'string' && value.trim() === '') return true;
+  return false;
+}
+
+function getRowLabelFromRow(row) {
+  if (!row) return null;
+  let label;
+  if (window.appState.geoMode === 'country') {
+    label = row.Country;
+  } else if (window.appState.geoMode === 'county') {
+    label = row.__displayName || `${(row.County || '').toString().trim()}, ${(row.State || '').toString().trim()}`;
+  } else {
+    label = row[window.appState.dataColumn];
+  }
+  if (isMissingLabelValue(label)) return null;
+  return String(label);
+}
+
+function findRowByLabel(label) {
+  if (isMissingLabelValue(label)) return null;
+  const target = String(label);
+  return window.appState.jsonData.find(row => getRowLabelFromRow(row) === target) || null;
+}
+
+function buildCountryLookupMaps(lookup) {
+  const alpha3ToNumeric = new Map();
+  const numericToAlpha3 = new Map();
+  (lookup || []).forEach(row => {
+    const alpha3 = normalizeAlpha3(row.Alpha3);
+    const numeric = normalizeCountryNumericId(row.Numeric);
+    if (!alpha3 || !numeric) return;
+    alpha3ToNumeric.set(alpha3, numeric);
+    numericToAlpha3.set(numeric, alpha3);
+  });
+  return { alpha3ToNumeric, numericToAlpha3 };
+}
+
+function showMapToast(message) {
+  const popup = document.getElementById('map-panel-popup');
+  if (!popup) return;
+  let toast = popup.querySelector('.map-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.className = 'map-toast';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    popup.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add('is-visible');
+  if (mapToastTimeout) clearTimeout(mapToastTimeout);
+  mapToastTimeout = setTimeout(() => {
+    toast.classList.remove('is-visible');
+  }, 2800);
+}
+
+function styleRegionFillPath(selection) {
+  return selection
+    .attr('stroke', 'none')
+    .style('cursor', 'pointer');
+}
+
+function appendFeatureMesh(parent, path, meshGeo, className, stroke, strokeWidth) {
+  return parent.append('path')
+    .attr('class', className)
+    .attr('d', path(meshGeo))
+    .attr('fill', 'none')
+    .attr('stroke', stroke)
+    .attr('stroke-width', strokeWidth)
+    .style('vector-effect', 'non-scaling-stroke')
+    .attr('pointer-events', 'none');
+}
+
+function resetMapHoverState() {
+  hoveredRegionKey = null;
+  regionOutlineState = null;
+  hideMapRegionTooltip();
+}
+
+function ensureMapRegionTooltip() {
+  const popup = document.getElementById('map-panel-popup');
+  if (!popup) return null;
+  let tooltip = popup.querySelector('.map-region-tooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.className = 'map-region-tooltip hidden';
+    tooltip.setAttribute('role', 'tooltip');
+    popup.appendChild(tooltip);
+  }
+  return tooltip;
+}
+
+function positionMapRegionTooltip(tooltip, evt) {
+  const popup = document.getElementById('map-panel-popup');
+  if (!popup || !tooltip || !evt) return;
+  const rect = popup.getBoundingClientRect();
+  tooltip.style.left = (evt.clientX - rect.left + 12) + 'px';
+  tooltip.style.top = (evt.clientY - rect.top - 8) + 'px';
+}
+
+function showMapRegionTooltip(label, evt) {
+  const tooltip = ensureMapRegionTooltip();
+  if (!tooltip || !label) return;
+  tooltip.textContent = label;
+  tooltip.classList.remove('hidden');
+  positionMapRegionTooltip(tooltip, evt);
+}
+
+function hideMapRegionTooltip() {
+  const popup = document.getElementById('map-panel-popup');
+  const tooltip = popup?.querySelector('.map-region-tooltip');
+  if (tooltip) tooltip.classList.add('hidden');
+}
+
+function clearHoveredRegion() {
+  hoveredRegionKey = null;
+  if (regionOutlineState) {
+    updateHoverOutlineLayer(regionOutlineState, null);
+  }
+  hideMapRegionTooltip();
+}
+
+function setHoveredRegion(feature, regionKey, label, evt, outlineState) {
+  hoveredRegionKey = regionKey;
+  regionOutlineState = outlineState;
+  updateHoverOutlineLayer(outlineState, feature);
+  if (label) showMapRegionTooltip(label, evt);
+}
+
+function attachRegionPointerHandlers(pathSelection, getLabel, outlineState) {
+  pathSelection
+    .on('mouseenter', function(evt, d) {
+      setHoveredRegion(d, outlineState.getRegionKey(d), getLabel(d), evt, outlineState);
+    })
+    .on('mousemove', function(evt) {
+      const tooltip = ensureMapRegionTooltip();
+      if (tooltip && !tooltip.classList.contains('hidden')) {
+        positionMapRegionTooltip(tooltip, evt);
+      }
+    })
+    .on('mouseleave', function(evt, d) {
+      if (hoveredRegionKey === outlineState.getRegionKey(d)) {
+        clearHoveredRegion();
+      }
+    });
+}
+
+function attachMapPointerLeaveSafety(svgElement, g) {
+  d3.select(svgElement).on('pointerleave', clearHoveredRegion);
+  g.on('pointerleave', clearHoveredRegion);
+}
+
+function buildCountyLabelMap(fipsCol) {
+  const labelMap = {};
+  if (!fipsCol || !window.appState.jsonData) return labelMap;
+  for (const row of window.appState.jsonData) {
+    const fips = normalizeFipsCode(row[fipsCol]);
+    if (!fips) continue;
+    const label = getRowLabelFromRow(row);
+    if (label) labelMap[fips] = label;
+  }
+  return labelMap;
+}
+
+function getCountyFeatureLabel(feature, labelMap) {
+  const fips = normalizeFipsCode(feature.id);
+  if (fips && labelMap[fips]) return labelMap[fips];
+  if (feature.properties && feature.properties.name) return feature.properties.name;
+  return fips || 'Unknown region';
+}
+
+function getWorldFeatureLabel(feature, labelMap, lookupMaps) {
+  const numeric = normalizeCountryNumericId(feature.id);
+  if (numeric && labelMap[numeric]) return labelMap[numeric];
+  if (feature.properties && feature.properties.name) return feature.properties.name;
+  const alpha3 = numeric ? lookupMaps.numericToAlpha3.get(numeric) : null;
+  return alpha3 || numeric || 'Unknown region';
+}
+
+function getDotScreenRadius(baseRadius, scale) {
+  return baseRadius / scale;
+}
+
+function updateDotSizes(circles, scale, hoveredCircle = null, selectedLabel = null) {
+  const selected = isFeatureMapSelectionMode() ? selectedLabel : null;
+  circles.each(function(d) {
+    const isHovered = this === hoveredCircle;
+    const isSelected = selected && d.label === selected;
+    let baseRadius = DOT_BASE_RADIUS;
+    if (isHovered) {
+      baseRadius = DOT_HOVER_RADIUS;
+    } else if (isSelected) {
+      baseRadius = DOT_BASE_RADIUS + DOT_SELECTED_EXTRA_RADIUS;
+    }
+
+    let stroke = '#fff';
+    let strokeWidth = DOT_STROKE_WIDTH;
+    if (isSelected) {
+      stroke = isHovered ? MAP_REGION_HOVER_STROKE : MAP_REGION_SELECTED_STROKE;
+      strokeWidth = isHovered ? MAP_REGION_HOVER_STROKE_WIDTH : DOT_SELECTED_STROKE_WIDTH;
+    }
+
+    d3.select(this)
+      .attr('r', getDotScreenRadius(baseRadius, scale))
+      .attr('stroke', stroke)
+      .attr('stroke-width', strokeWidth / scale);
+  });
+}
+
+function ensureMapZoomControls(mapContainer, width, height) {
+  const content = mapContainer.querySelector('.map-popup-content') || mapContainer;
+  let controls = content.querySelector('.map-zoom-controls');
+  if (!controls) {
+    controls = document.createElement('div');
+    controls.className = 'map-zoom-controls';
+    controls.innerHTML = `
+      <button type="button" class="map-zoom-btn" data-zoom="in" aria-label="Zoom in">+</button>
+      <button type="button" class="map-zoom-btn" data-zoom="out" aria-label="Zoom out">&minus;</button>
+    `;
+    content.appendChild(controls);
+  }
+
+  const zoomInBtn = controls.querySelector('[data-zoom="in"]');
+  const zoomOutBtn = controls.querySelector('[data-zoom="out"]');
+
+  const updateDisabled = () => {
+    const k = currentZoomTransform ? currentZoomTransform.k : 1;
+    zoomInBtn.disabled = k >= MAX_ZOOM;
+    zoomOutBtn.disabled = k <= 1;
+  };
+
+  const onZoomClick = (direction) => (evt) => {
+    evt.preventDefault();
+    evt.stopPropagation();
+    if (!activeMapZoom || !activeMapSvg) return;
+    const factor = direction === 'in' ? ZOOM_BUTTON_FACTOR : 1 / ZOOM_BUTTON_FACTOR;
+    d3.select(activeMapSvg)
+      .transition()
+      .duration(180)
+      .call(activeMapZoom.scaleBy, factor, [width / 2, height / 2]);
+  };
+
+  zoomInBtn.onclick = onZoomClick('in');
+  zoomOutBtn.onclick = onZoomClick('out');
+  controls._updateDisabled = updateDisabled;
+  updateDisabled();
+  return controls;
+}
+
+function setupMapZoom({ svgElement, g, projection, width, height, mapType, onZoom }) {
+  const zoom = d3.zoom()
+    .scaleExtent([1, MAX_ZOOM])
+    .on('zoom', (event) => {
+      g.attr('transform', event.transform);
+      currentZoomTransform = event.transform;
+      updateMapViewAnchorState(projection, width, height, mapType);
+      if (typeof onZoom === 'function') onZoom(event);
+      const controls = document.getElementById('map-panel-popup')?.querySelector('.map-zoom-controls');
+      if (controls && controls._updateDisabled) controls._updateDisabled();
+    });
+
+  activeMapZoom = zoom;
+  activeMapSvg = svgElement;
+
+  recomputeZoomForResizeIfNeeded(projection, width, height);
+
+  const svg = d3.select(svgElement);
+  svg.call(zoom);
+  if (currentZoomTransform) {
+    svg.call(zoom.transform, currentZoomTransform);
+  }
+  return zoom;
+}
+
 // Prevent browser page zoom when wheeling over the map panel (capture + non-passive).
 let mapPopupWheelCaptureInstalled = false;
 
@@ -70,12 +476,10 @@ function attachMapWheelCapture() {
   const popup = document.getElementById('map-panel-popup');
   if (!popup || mapPopupWheelCaptureInstalled) return;
   mapPopupWheelCaptureInstalled = true;
-  // preventDefault only — do not stopPropagation or wheel never reaches the SVG for d3.zoom
   const handler = (e) => { e.preventDefault(); };
   popup.addEventListener('wheel', handler, { passive: false, capture: true });
 }
 
-// Detect if dataset has FIPS code column
 function detectFIPSColumn() {
   if (!window.appState.jsonData || window.appState.jsonData.length === 0) return null;
   const columns = Object.keys(window.appState.jsonData[0]);
@@ -83,7 +487,6 @@ function detectFIPSColumn() {
   return fipsCol || null;
 }
 
-// Detect if dataset has Country Code column
 function detectCountryCodeColumn() {
   if (!window.appState.jsonData || window.appState.jsonData.length === 0) return null;
   const columns = Object.keys(window.appState.jsonData[0]);
@@ -91,22 +494,19 @@ function detectCountryCodeColumn() {
   return countryCodeCol || null;
 }
 
-// Detect if dataset has Latitude/Longitude columns
 function detectLatLongColumns() {
   if (!window.appState.jsonData || window.appState.jsonData.length === 0) return null;
   const columns = Object.keys(window.appState.jsonData[0]);
-  
-  // Check for Latitude/Longitude
+
   const latCol = columns.find(col => /^latitude$/i.test(col) || /^lat$/i.test(col) || /^y$/i.test(col));
   const longCol = columns.find(col => /^longitude$/i.test(col) || /^long$/i.test(col) || /^x$/i.test(col));
-  
+
   if (latCol && longCol) {
     return { lat: latCol, long: longCol };
   }
   return null;
 }
 
-// Fallback country lookup for common countries (Alpha3 -> Numeric)
 const FALLBACK_COUNTRY_LOOKUP = [
   { Alpha3: 'USA', Numeric: '840' },
   { Alpha3: 'CAN', Numeric: '124' },
@@ -151,12 +551,12 @@ const FALLBACK_COUNTRY_LOOKUP = [
   { Alpha3: 'VEN', Numeric: '862' }
 ];
 
-// Load country lookup table
 async function loadCountryLookup() {
   if (countryLookupData) return countryLookupData;
-  
+
   try {
     const response = await fetch('countryLookUp.xlsx');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const arrayBuffer = await response.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, { type: 'array' });
@@ -171,195 +571,101 @@ async function loadCountryLookup() {
   }
 }
 
-// Get FIPS code for a location label
 function getFIPSForLocation(label) {
   const fipsCol = detectFIPSColumn();
   if (!fipsCol || !window.appState.jsonData) return null;
-  
-  const row = window.appState.jsonData.find(d => {
-    let rowLabel;
-    if (window.appState.geoMode === 'country') {
-      rowLabel = d.Country;
-    } else if (window.appState.geoMode === 'county') {
-      rowLabel = d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`;
-    } else {
-      rowLabel = d[window.appState.dataColumn];
-    }
-    return rowLabel === label;
-  });
-  
+
+  const row = findRowByLabel(label);
   if (!row) return null;
-  
-  let fips = row[fipsCol];
-  if (fips === undefined || fips === null || fips === '..') return null;
-  
-  // Ensure FIPS is a 5-digit string
-  fips = String(fips).padStart(5, '0');
-  return fips;
+
+  return normalizeFipsCode(row[fipsCol]);
 }
 
-// Get country numeric code for a location label using the lookup table
 async function getCountryCodeForLocation(label) {
   const countryCodeCol = detectCountryCodeColumn();
   if (!countryCodeCol || !window.appState.jsonData) return null;
-  
-  const row = window.appState.jsonData.find(d => {
-    let rowLabel;
-    if (window.appState.geoMode === 'country') {
-      rowLabel = d.Country;
-    } else if (window.appState.geoMode === 'county') {
-      rowLabel = d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`;
-    } else {
-      rowLabel = d[window.appState.dataColumn];
-    }
-    return rowLabel === label;
-  });
-  
+
+  const row = findRowByLabel(label);
   if (!row) return null;
-  
-  const countryCode = row[countryCodeCol]; // Alpha3 code
-  if (!countryCode || countryCode === '..') return null;
-  
-  // Look up numeric code from lookup table
+
+  const countryCode = normalizeAlpha3(row[countryCodeCol]);
+  if (!countryCode) return null;
+
   const lookup = await loadCountryLookup();
   if (!lookup) return null;
-  
-  const lookupRow = lookup.find(l => l.Alpha3 === countryCode);
-  return lookupRow ? String(lookupRow.Numeric) : null;
+
+  const { alpha3ToNumeric } = buildCountryLookupMaps(lookup);
+  return alpha3ToNumeric.get(countryCode) || null;
 }
 
-// Get color for a FIPS code based on current visualization state
 function getColorForFIPS(fipsCode) {
-  const inSelectionMode = window.appState.encodingMode === 'selection' && 
+  const normalizedFips = normalizeFipsCode(fipsCode);
+  if (!normalizedFips) return '#e2e8f0';
+
+  const inSelectionMode = window.appState.encodingMode === 'selection' &&
                           window.appState.viewMode === 'category-final';
-  
+
   if (inSelectionMode) {
-    // Check if this FIPS is in the selected locations
     const locations = window.appState.selectionModeLocations || [];
     for (const loc of locations) {
       const locFips = getFIPSForLocation(loc.location);
-      if (locFips === fipsCode) {
-        return loc.color;
-      }
-    }
-    return '#e2e8f0'; // Light grey for unselected
-  } else {
-    // Feature encoding mode - use the encoding field colors
-    const encodingField = window.appState.categoryEncodedField;
-    if (!encodingField || !window.appState.jsonData) return '#e2e8f0';
-    
-    // Find the row with this FIPS code
-    const fipsCol = detectFIPSColumn();
-    if (!fipsCol) return '#e2e8f0';
-    
-    const row = window.appState.jsonData.find(r => {
-      let rowFips = r[fipsCol];
-      if (rowFips === undefined || rowFips === null || rowFips === '..') return false;
-      rowFips = String(rowFips).padStart(5, '0');
-      return rowFips === fipsCode;
-    });
-    
-    if (!row) return '#e2e8f0';
-    
-    // Get the category value for this row
-    const rawCategory = row[encodingField];
-    const fallbackCategory = 'Not specified';
-    let categoryValue = fallbackCategory;
-    if (rawCategory !== undefined && rawCategory !== null && rawCategory !== '..') {
-      const catStr = String(rawCategory).trim();
-      categoryValue = catStr === '' ? fallbackCategory : catStr;
-    }
-    
-    // Create color scale (same as beeswarm)
-    const categories = Array.from(new Set(window.appState.jsonData.map(r => {
-      const rc = r[encodingField];
-      if (rc === undefined || rc === null || rc === '..') return fallbackCategory;
-      const cs = String(rc).trim();
-      return cs === '' ? fallbackCategory : cs;
-    })));
-    
-    const colorScale = d3.scaleOrdinal()
-      .domain(categories)
-      .range(categories.map((_, idx) => {
-        if (categories.length === 1) return d3.interpolateRainbow(0.35);
-        return d3.interpolateRainbow(idx / categories.length);
-      }));
-    
-    const baseColor = colorScale(categoryValue);
-    // Apply color overrides
-    const overrides = window.appState.beeswarmColorOverrides || {};
-    return overrides[baseColor] || baseColor;
-  }
-}
-
-// Get color for a country code (same logic as FIPS)
-async function getColorForCountryCode(countryNumericCode, row) {
-  const inSelectionMode = window.appState.encodingMode === 'selection' && 
-                          window.appState.viewMode === 'category-final';
-  
-  if (inSelectionMode) {
-    const locations = window.appState.selectionModeLocations || [];
-    for (const loc of locations) {
-      const locCode = await getCountryCodeForLocation(loc.location);
-      if (locCode === countryNumericCode) {
+      if (locFips === normalizedFips) {
         return loc.color;
       }
     }
     return '#e2e8f0';
-  } else {
-    // Feature encoding mode - use the encoding field colors
-    const encodingField = window.appState.categoryEncodedField;
-    if (!encodingField || !row) return '#e2e8f0';
-    
-    // Get the category value for this row
-    const rawCategory = row[encodingField];
-    const fallbackCategory = 'Not specified';
-    let categoryValue = fallbackCategory;
-    if (rawCategory !== undefined && rawCategory !== null && rawCategory !== '..') {
-      const catStr = String(rawCategory).trim();
-      categoryValue = catStr === '' ? fallbackCategory : catStr;
-    }
-    
-    // Create color scale (same as beeswarm)
-    const categories = Array.from(new Set(window.appState.jsonData.map(r => {
-      const rc = r[encodingField];
-      if (rc === undefined || rc === null || rc === '..') return fallbackCategory;
-      const cs = String(rc).trim();
-      return cs === '' ? fallbackCategory : cs;
-    })));
-    
-    const colorScale = d3.scaleOrdinal()
-      .domain(categories)
-      .range(categories.map((_, idx) => {
-        if (categories.length === 1) return d3.interpolateRainbow(0.35);
-        return d3.interpolateRainbow(idx / categories.length);
-      }));
-    
-    const baseColor = colorScale(categoryValue);
-    // Apply color overrides
-    const overrides = window.appState.beeswarmColorOverrides || {};
-    return overrides[baseColor] || baseColor;
   }
+
+  const encodingField = window.appState.categoryEncodedField;
+  if (!encodingField || !window.appState.jsonData) return '#e2e8f0';
+
+  const fipsCol = detectFIPSColumn();
+  if (!fipsCol) return '#e2e8f0';
+
+  const row = window.appState.jsonData.find(r => normalizeFipsCode(r[fipsCol]) === normalizedFips);
+  if (!row) return '#e2e8f0';
+
+  const rawCategory = row[encodingField];
+  const fallbackCategory = 'Not specified';
+  let categoryValue = fallbackCategory;
+  if (rawCategory !== undefined && rawCategory !== null && rawCategory !== '..') {
+    const catStr = String(rawCategory).trim();
+    categoryValue = catStr === '' ? fallbackCategory : catStr;
+  }
+
+  const categories = Array.from(new Set(window.appState.jsonData.map(r => {
+    const rc = r[encodingField];
+    if (rc === undefined || rc === null || rc === '..') return fallbackCategory;
+    const cs = String(rc).trim();
+    return cs === '' ? fallbackCategory : cs;
+  })));
+
+  const colorScale = d3.scaleOrdinal()
+    .domain(categories)
+    .range(categories.map((_, idx) => {
+      if (categories.length === 1) return d3.interpolateRainbow(0.35);
+      return d3.interpolateRainbow(idx / categories.length);
+    }));
+
+  const baseColor = colorScale(categoryValue);
+  const overrides = window.appState.beeswarmColorOverrides || {};
+  return overrides[baseColor] || baseColor;
 }
 
-// Show/hide the state and county overlay groups based on the current zoom level only.
-// The SVG viewBox clips anything off-screen automatically, so no viewport check is needed.
 function applyOverlayVisibility(k, statesGroup, countiesGroup) {
-  statesGroup.style('display',  k >= WORLD_STATES_ZOOM_THRESHOLD  ? null : 'none');
+  statesGroup.style('display', k >= WORLD_STATES_ZOOM_THRESHOLD ? null : 'none');
   countiesGroup.style('display', k >= WORLD_COUNTIES_ZOOM_THRESHOLD ? null : 'none');
 }
 
-// Load US counties TopoJSON
 async function loadUSCountiesMap() {
   if (usCountiesData) return usCountiesData;
   if (isLoadingMap) {
-    // Wait for existing load
     while (isLoadingMap) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     return usCountiesData;
   }
-  
+
   isLoadingMap = true;
   try {
     const url = 'https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json';
@@ -373,10 +679,9 @@ async function loadUSCountiesMap() {
   }
 }
 
-// Load world countries TopoJSON
 async function loadWorldCountriesMap() {
   if (worldCountriesData) return worldCountriesData;
-  
+
   try {
     const url = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
     worldCountriesData = await d3.json(url);
@@ -387,17 +692,16 @@ async function loadWorldCountriesMap() {
   }
 }
 
-// Shared click handler for both US and world maps
 function handleLocationClick(label, evt) {
-  const inSelectionMode = window.appState.encodingMode === 'selection' && 
+  const inSelectionMode = window.appState.encodingMode === 'selection' &&
                           window.appState.viewMode === 'category-final';
-  
+
   if (inSelectionMode) {
     const locations = window.appState.selectionModeLocations || [];
-    
+
     if (evt.shiftKey) {
       const existingIndex = locations.findIndex(loc => loc.location === label);
-      
+
       if (existingIndex >= 0) {
         locations.splice(existingIndex, 1);
         if (window.appState.selectionModeActiveIndex >= locations.length) {
@@ -417,7 +721,7 @@ function handleLocationClick(label, evt) {
         }
         window.appState.selectedCountry = label;
       }
-      
+
       if (typeof window.renderSelectionTable === 'function') {
         window.renderSelectionTable();
       }
@@ -438,7 +742,7 @@ function handleLocationClick(label, evt) {
   } else {
     window.appState.selectedCountry = label;
   }
-  
+
   const selectEl = document.getElementById('countrySelect');
   if (selectEl) {
     const exists = Array.from(selectEl.options).some(o => o.value === label);
@@ -452,58 +756,105 @@ function handleLocationClick(label, evt) {
   if (window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
     window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
   }
-  renderMapPanel();
 }
 
-// Render lat/long map with dots
-async function renderLatLongMap(svgElement, width, height) {
+function resolveWorldCountryClick(numericCode, lookupMaps, countryCodeCol) {
+  const normalizedNumeric = normalizeCountryNumericId(numericCode);
+  if (!normalizedNumeric) {
+    showMapToast('This region cannot be selected.');
+    return;
+  }
+
+  const alpha3 = lookupMaps.numericToAlpha3.get(normalizedNumeric);
+  if (!alpha3) {
+    showMapToast('This region is not available in the dataset.');
+    return;
+  }
+
+  const row = window.appState.jsonData.find(r => normalizeAlpha3(r[countryCodeCol]) === alpha3);
+  if (!row) {
+    showMapToast('No data available for this region.');
+    return;
+  }
+
+  const label = getRowLabelFromRow(row);
+  if (!label) {
+    showMapToast('This region has no selectable label in the dataset.');
+    return;
+  }
+
+  return label;
+}
+
+function resolveCountyClick(fipsCode, fipsCol) {
+  const normalizedFips = normalizeFipsCode(fipsCode);
+  if (!normalizedFips) {
+    showMapToast('This region cannot be selected.');
+    return;
+  }
+
+  const row = window.appState.jsonData.find(r => normalizeFipsCode(r[fipsCol]) === normalizedFips);
+  if (!row) {
+    showMapToast('No data available for this region.');
+    return;
+  }
+
+  const label = getRowLabelFromRow(row);
+  if (!label) {
+    showMapToast('This region has no selectable label in the dataset.');
+    return;
+  }
+
+  return label;
+}
+
+async function renderLatLongMap(svgElement, width, height, generation) {
   const mapData = await loadWorldCountriesMap();
   const latLongCols = detectLatLongColumns();
-  
+
+  if (isMapRenderStale(generation)) return;
+
   if (!mapData || !latLongCols) {
     console.error('World map data or lat/long columns not available');
     return;
   }
-  
-  // Reset zoom if switching to a different map type
+
   if (currentMapType !== 'latlong') {
     currentZoomTransform = null;
     clearMapViewAnchorState();
     currentMapType = 'latlong';
   }
-  
+
   const svg = d3.select(svgElement);
   svg.selectAll('*').remove();
-  
+  resetMapHoverState();
+
   const countries = topojson.feature(mapData, mapData.objects.countries);
   const projection = d3.geoNaturalEarth1()
     .fitSize([width - MAP_FIT_PADDING, height - MAP_FIT_PADDING], countries);
   const path = d3.geoPath().projection(projection);
-  
-  // Background
+
   svg.append('rect')
     .attr('width', width)
     .attr('height', height)
     .attr('fill', '#f0f9ff');
-  
-  // Create a group for zoom/pan
+
   const g = svg.append('g');
-  
-  // Render world map as background
-  g.append('g')
+
+  styleRegionFillPath(g.append('g')
     .attr('class', 'countries')
     .selectAll('path')
     .data(countries.features)
     .join('path')
     .attr('d', path)
     .attr('fill', '#e2e8f0')
-    .attr('stroke', '#cbd5e1')
-    .attr('stroke-width', 0.5);
+    .attr('pointer-events', 'none'));
 
-  // Preload us-atlas data for state/county overlays at higher zoom levels
+  appendFeatureMesh(g, path, topojson.mesh(mapData, mapData.objects.countries), 'countries-mesh', '#cbd5e1', MAP_REGION_STROKE_WIDTH);
+
   const usAtlasData = await loadUSCountiesMap();
+  if (isMapRenderStale(generation)) return;
 
-  // Render US states overlay (borders only, geographic coords → same NaturalEarth path)
   const usStatesOverlay = g.append('g').attr('class', 'us-states-overlay');
   if (usAtlasData) {
     const usStates = topojson.feature(usAtlasData, usAtlasData.objects.states);
@@ -518,7 +869,6 @@ async function renderLatLongMap(svgElement, width, height) {
       .attr('pointer-events', 'none');
   }
 
-  // Render US counties overlay (borders only)
   const usCountiesOverlay = g.append('g').attr('class', 'us-counties-overlay');
   if (usAtlasData) {
     const usCountiesFeat = topojson.feature(usAtlasData, usAtlasData.objects.counties);
@@ -528,199 +878,155 @@ async function renderLatLongMap(svgElement, width, height) {
       .attr('d', path)
       .attr('fill', 'none')
       .attr('stroke', '#94a3b8')
-      .attr('stroke-width', 0.5)
+      .attr('stroke-width', MAP_REGION_STROKE_WIDTH)
       .style('vector-effect', 'non-scaling-stroke')
       .attr('pointer-events', 'none');
   }
 
-  // Render dots for each location
-  const inSelectionMode = window.appState.encodingMode === 'selection' && 
+  const inSelectionMode = window.appState.encodingMode === 'selection' &&
                           window.appState.viewMode === 'category-final';
-  
-  // Setup for feature encoding mode
-  const encodingField = window.appState.categoryEncodedField;
-  const hasEncodingField = !inSelectionMode && encodingField && window.appState.jsonData.length > 0 && 
-                           Object.prototype.hasOwnProperty.call(window.appState.jsonData[0], encodingField);
-  const fallbackCategory = hasEncodingField ? 'Not specified' : 'All items';
-  
-  // Create color scale for feature mode (similar to beeswarm)
-  let colorScale = null;
-  if (hasEncodingField) {
-    const categories = Array.from(new Set(window.appState.jsonData.map(row => {
-      const rawCategory = row[encodingField];
-      if (rawCategory === undefined || rawCategory === null || rawCategory === '..') return fallbackCategory;
-      const catStr = String(rawCategory).trim();
-      return catStr === '' ? fallbackCategory : catStr;
-    })));
-    
-    colorScale = d3.scaleOrdinal()
-      .domain(categories)
-      .range(categories.map((_, idx) => {
-        if (categories.length === 1 && (!hasEncodingField || !encodingField)) {
-          return '#4f46e5';
-        } else if (categories.length === 1) {
-          return d3.interpolateRainbow(0.35);
-        }
-        return d3.interpolateRainbow(idx / categories.length);
-      }));
-  }
-  
+
+  const colorCtx = typeof window.buildFeatureEncodingColorContext === 'function'
+    ? window.buildFeatureEncodingColorContext()
+    : null;
+  const hasEncodingField = colorCtx ? colorCtx.hasEncodingField : false;
+  const featureColorScale = colorCtx && hasEncodingField ? colorCtx.getDefaultColorScale() : null;
+  const defaultDotColor = colorCtx ? colorCtx.getDefaultDotColor() : '#64748b';
+
   const dots = [];
   window.appState.jsonData.forEach(row => {
     const lat = parseFloat(row[latLongCols.lat]);
     const long = parseFloat(row[latLongCols.long]);
-    
+
     if (isNaN(lat) || isNaN(long)) return;
-    
-    // Get label
-    let label;
-    if (window.appState.geoMode === 'country') {
-      label = row.Country;
-    } else if (window.appState.geoMode === 'county') {
-      label = row.__displayName || `${(row.County || '').toString().trim()}, ${(row.State || '').toString().trim()}`;
-    } else {
-      label = row[window.appState.dataColumn];
-    }
-    
+
+    const label = getRowLabelFromRow(row);
     if (!label) return;
-    
-    // Get color
-    let color = '#64748b'; // Default gray
+
+    let color = defaultDotColor;
     if (inSelectionMode) {
       const locations = window.appState.selectionModeLocations || [];
       const selectedLoc = locations.find(loc => loc.location === label);
       if (selectedLoc) {
         color = selectedLoc.color;
       }
-    } else if (hasEncodingField && colorScale) {
-      // Feature encoding mode - get category and color
-      const rawCategory = row[encodingField];
-      let categoryValue = fallbackCategory;
-      if (rawCategory !== undefined && rawCategory !== null && rawCategory !== '..') {
-        const catStr = String(rawCategory).trim();
-        categoryValue = catStr === '' ? fallbackCategory : catStr;
-      }
-      const baseColor = colorScale(categoryValue);
-      // Apply color overrides if any
-      const overrides = window.appState.beeswarmColorOverrides || {};
-      color = overrides[baseColor] || baseColor;
+    } else if (hasEncodingField && colorCtx && featureColorScale) {
+      color = colorCtx.getColorForRow(row, featureColorScale);
     }
-    
+
     const coords = projection([long, lat]);
     if (coords) {
       dots.push({ x: coords[0], y: coords[1], label, color, row });
     }
   });
-  
-  // Draw dots
+
   const dotsGroup = g.append('g')
     .attr('class', 'location-dots');
-    
+
+  const initialScale = currentZoomTransform ? currentZoomTransform.k : 1;
+  const selectedLabel = window.appState.selectedCountry || null;
   const circles = dotsGroup
     .selectAll('circle')
     .data(dots)
     .join('circle')
     .attr('cx', d => d.x)
     .attr('cy', d => d.y)
-    .attr('r', 4)
+    .attr('r', getDotScreenRadius(DOT_BASE_RADIUS, initialScale))
     .attr('fill', d => d.color)
     .attr('stroke', '#fff')
-    .attr('stroke-width', 0.5)
+    .attr('stroke-width', DOT_STROKE_WIDTH / initialScale)
     .style('cursor', 'pointer')
     .on('click', function(evt, d) {
       handleLocationClick(d.label, evt);
     })
-    .on('mouseenter', function() {
-      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
-      d3.select(this)
-        .attr('r', 6 / currentScale)
-        .attr('stroke-width', 1.5 / currentScale);
+    .on('mouseenter', function(evt, d) {
+      const scale = currentZoomTransform ? currentZoomTransform.k : 1;
+      updateDotSizes(circles, scale, this, selectedLabel);
+      showMapRegionTooltip(d.label, evt);
+    })
+    .on('mousemove', function(evt) {
+      const tooltip = ensureMapRegionTooltip();
+      if (tooltip && !tooltip.classList.contains('hidden')) {
+        positionMapRegionTooltip(tooltip, evt);
+      }
     })
     .on('mouseleave', function() {
-      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
-      d3.select(this)
-        .attr('r', 4 / currentScale)
-        .attr('stroke-width', 0.5 / currentScale);
-    });
-  
-  // Add zoom behavior
-  const zoom = d3.zoom()
-    .scaleExtent([1, MAX_ZOOM])
-    .on('zoom', (event) => {
-      g.attr('transform', event.transform);
-      currentZoomTransform = event.transform;
-      updateMapViewAnchorState(projection, width, height, 'latlong');
-
-      // Keep dots constant size by inversely scaling them
-      const scale = event.transform.k;
-      circles
-        .attr('r', 4 / scale)
-        .attr('stroke-width', 0.5 / scale);
-
-      // Show/hide overlays based on zoom level
-      applyOverlayVisibility(scale, usStatesOverlay, usCountiesOverlay);
+      const scale = currentZoomTransform ? currentZoomTransform.k : 1;
+      updateDotSizes(circles, scale, null, selectedLabel);
+      hideMapRegionTooltip();
     });
 
-  recomputeZoomForResizeIfNeeded(projection, width, height);
+  updateDotSizes(circles, initialScale, null, selectedLabel);
 
-  svg.call(zoom);
+  const mapContainer = document.getElementById('map-panel-popup');
+  ensureMapZoomControls(mapContainer, width, height);
+
+  setupMapZoom({
+    svgElement,
+    g,
+    projection,
+    width,
+    height,
+    mapType: 'latlong',
+    onZoom: (event) => {
+      updateDotSizes(circles, event.transform.k, null, selectedLabel);
+      applyOverlayVisibility(event.transform.k, usStatesOverlay, usCountiesOverlay);
+    }
+  });
 
   const initialTransform = currentZoomTransform || d3.zoomIdentity;
   applyOverlayVisibility(initialTransform.k, usStatesOverlay, usCountiesOverlay);
-
-  if (currentZoomTransform) {
-    svg.call(zoom.transform, currentZoomTransform);
-  }
-
+  attachMapPointerLeaveSafety(svgElement, g);
   attachMapWheelCapture();
   updateMapViewAnchorState(projection, width, height, 'latlong');
 }
 
-// Render world countries map (reuses same structure as US map)
-async function renderWorldMap(svgElement, width, height) {
+async function renderWorldMap(svgElement, width, height, generation) {
   const mapData = await loadWorldCountriesMap();
   const lookup = await loadCountryLookup();
+
+  if (isMapRenderStale(generation)) return;
+
   if (!mapData) {
     console.error('World map data not available');
     return;
   }
-  
+
   if (!lookup || lookup.length === 0) {
     console.error('Country lookup not available');
     return;
   }
-  
-  // Reset zoom if switching to a different map type
+
+  const lookupMaps = buildCountryLookupMaps(lookup);
+
   if (currentMapType !== 'world') {
     currentZoomTransform = null;
     clearMapViewAnchorState();
     currentMapType = 'world';
   }
-  
+
   const svg = d3.select(svgElement);
   svg.selectAll('*').remove();
-  
+  resetMapHoverState();
+
   const countries = topojson.feature(mapData, mapData.objects.countries);
   const projection = d3.geoNaturalEarth1()
     .fitSize([width - MAP_FIT_PADDING, height - MAP_FIT_PADDING], countries);
   const path = d3.geoPath().projection(projection);
-  
+
   svg.append('rect')
     .attr('width', width)
     .attr('height', height)
     .attr('fill', '#f0f9ff');
-  
-  // Create a group for zoom/pan
+
   const g = svg.append('g');
-  
-  // Pre-calculate colors for all countries
+
   const countryCodeCol = detectCountryCodeColumn();
-  const inSelectionMode = window.appState.encodingMode === 'selection' && 
+  const inSelectionMode = window.appState.encodingMode === 'selection' &&
                           window.appState.viewMode === 'category-final';
   const encodingField = window.appState.categoryEncodedField;
   const hasEncodingField = !inSelectionMode && encodingField && window.appState.jsonData.length > 0;
-  
-  // Create color scale for feature mode
+
   let colorScale = null;
   if (hasEncodingField) {
     const fallbackCategory = 'Not specified';
@@ -730,7 +1036,7 @@ async function renderWorldMap(svgElement, width, height) {
       const cs = String(rc).trim();
       return cs === '' ? fallbackCategory : cs;
     })));
-    
+
     colorScale = d3.scaleOrdinal()
       .domain(categories)
       .range(categories.map((_, idx) => {
@@ -738,110 +1044,79 @@ async function renderWorldMap(svgElement, width, height) {
         return d3.interpolateRainbow(idx / categories.length);
       }));
   }
-  
+
   const colorMap = {};
+  const labelMap = {};
   if (countryCodeCol) {
     for (const row of window.appState.jsonData) {
-      const countryCode = row[countryCodeCol];
-      if (!countryCode || countryCode === '..') continue;
-      const lookupRow = lookup.find(l => l.Alpha3 === countryCode);
-      if (lookupRow) {
-        // Pad to 3 digits to match TopoJSON format (e.g., '032' for Argentina, '076' for Brazil)
-        const numericCode = String(lookupRow.Numeric).padStart(3, '0');
-        
-        // Get label for this row
-        let label;
-        if (window.appState.geoMode === 'country') {
-          label = row.Country;
-        } else if (window.appState.geoMode === 'county') {
-          label = row.__displayName || `${(row.County || '').toString().trim()}, ${(row.State || '').toString().trim()}`;
-        } else {
-          label = row[window.appState.dataColumn];
+      const countryCode = normalizeAlpha3(row[countryCodeCol]);
+      if (!countryCode) continue;
+      const numericCode = lookupMaps.alpha3ToNumeric.get(countryCode);
+      if (!numericCode) continue;
+
+      const label = getRowLabelFromRow(row);
+      if (!label) continue;
+
+      labelMap[numericCode] = label;
+
+      let color = '#e2e8f0';
+      if (inSelectionMode) {
+        const locations = window.appState.selectionModeLocations || [];
+        const selectedLoc = locations.find(loc => loc.location === label);
+        if (selectedLoc) {
+          color = selectedLoc.color;
         }
-        
-        // Calculate color
-        let color = '#e2e8f0';
-        if (inSelectionMode) {
-          const locations = window.appState.selectionModeLocations || [];
-          const selectedLoc = locations.find(loc => loc.location === label);
-          if (selectedLoc) {
-            color = selectedLoc.color;
-          }
-        } else if (hasEncodingField && colorScale) {
-          const rawCategory = row[encodingField];
-          const fallbackCategory = 'Not specified';
-          let categoryValue = fallbackCategory;
-          if (rawCategory !== undefined && rawCategory !== null && rawCategory !== '..') {
-            const catStr = String(rawCategory).trim();
-            categoryValue = catStr === '' ? fallbackCategory : catStr;
-          }
-          const baseColor = colorScale(categoryValue);
-          const overrides = window.appState.beeswarmColorOverrides || {};
-          color = overrides[baseColor] || baseColor;
+      } else if (hasEncodingField && colorScale) {
+        const rawCategory = row[encodingField];
+        const fallbackCategory = 'Not specified';
+        let categoryValue = fallbackCategory;
+        if (rawCategory !== undefined && rawCategory !== null && rawCategory !== '..') {
+          const catStr = String(rawCategory).trim();
+          categoryValue = catStr === '' ? fallbackCategory : catStr;
         }
-        
-        colorMap[numericCode] = color;
+        const baseColor = colorScale(categoryValue);
+        const overrides = window.appState.beeswarmColorOverrides || {};
+        color = overrides[baseColor] || baseColor;
       }
+
+      colorMap[numericCode] = color;
     }
   }
-  
-  const countryPaths = g.append('g')
+
+  const countryPaths = styleRegionFillPath(g.append('g')
     .attr('class', 'countries')
     .selectAll('path')
     .data(countries.features)
     .join('path')
     .attr('d', path)
-    .attr('fill', d => colorMap[d.id] || '#e2e8f0')
-    .attr('stroke', '#ffffff')
-    .attr('stroke-width', 0.5)
-    .style('cursor', 'pointer')
-    .on('click', async function(evt, d) {
-      // Same click handler logic as US map, but using country codes
-      const countryCodeCol = detectCountryCodeColumn();
-      if (!countryCodeCol) return;
-      
-      const numericCode = d.id;
-      // Pad the lookup numeric code to match TopoJSON format
-      const lookupRow = lookup.find(l => String(l.Numeric).padStart(3, '0') === numericCode);
-      if (!lookupRow) return;
-      
-      const row = window.appState.jsonData.find(r => r[countryCodeCol] === lookupRow.Alpha3);
-      if (!row) return;
-      
-      let label;
-      if (window.appState.geoMode === 'country') {
-        label = row.Country;
-      } else if (window.appState.geoMode === 'county') {
-        label = row.__displayName || `${(row.County || '').toString().trim()}, ${(row.State || '').toString().trim()}`;
-      } else {
-        label = row[window.appState.dataColumn];
+    .attr('fill', d => colorMap[normalizeCountryNumericId(d.id)] || '#e2e8f0'))
+    .on('click', function(evt, d) {
+      if (!countryCodeCol) {
+        showMapToast('This dataset has no country code column.');
+        return;
       }
-      
+
+      const label = resolveWorldCountryClick(d.id, lookupMaps, countryCodeCol);
       if (!label) return;
-      
-      // Same selection mode logic as US map
       handleLocationClick(label, evt);
-    })
-    .on('mouseenter', function() {
-      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
-      d3.select(this)
-        .attr('stroke', '#334155')
-        .attr('stroke-width', 1.5 / currentScale);
-    })
-    .on('mouseleave', function() {
-      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
-      d3.select(this)
-        .attr('stroke', '#ffffff')
-        .attr('stroke-width', 0.5 / currentScale);
     });
-  
-  // Preload us-atlas data for state/county overlays at higher zoom levels
+
+  let selectedNumericId = null;
+  if (isFeatureMapSelectionMode()) {
+    const targetLabel = String(window.appState.selectedCountry);
+    for (const [numericCode, label] of Object.entries(labelMap)) {
+      if (label === targetLabel) {
+        selectedNumericId = numericCode;
+        break;
+      }
+    }
+  }
+
+  appendFeatureMesh(g, path, topojson.mesh(mapData, mapData.objects.countries), 'countries-mesh', MAP_REGION_STROKE, MAP_REGION_STROKE_WIDTH);
+
   const usAtlasData = await loadUSCountiesMap();
+  if (isMapRenderStale(generation)) return;
 
-  // us-atlas features have geographic (lon/lat) coordinates — render with the same
-  // NaturalEarth `path` generator already used for countries (no SVG group transform needed).
-
-  // Render US states overlay (borders only, no fill)
   const usStatesOverlay = g.append('g').attr('class', 'us-states-overlay');
   if (usAtlasData) {
     const usStates = topojson.feature(usAtlasData, usAtlasData.objects.states);
@@ -856,7 +1131,6 @@ async function renderWorldMap(svgElement, width, height) {
       .attr('pointer-events', 'none');
   }
 
-  // Render US counties overlay (borders only, no fill)
   const usCountiesOverlay = g.append('g').attr('class', 'us-counties-overlay');
   if (usAtlasData) {
     const usCountiesFeat = topojson.feature(usAtlasData, usAtlasData.objects.counties);
@@ -866,190 +1140,163 @@ async function renderWorldMap(svgElement, width, height) {
       .attr('d', path)
       .attr('fill', 'none')
       .attr('stroke', '#94a3b8')
-      .attr('stroke-width', 0.5)
+      .attr('stroke-width', MAP_REGION_STROKE_WIDTH)
       .style('vector-effect', 'non-scaling-stroke')
       .attr('pointer-events', 'none');
   }
 
-  // Add zoom behavior
-  const zoom = d3.zoom()
-    .scaleExtent([1, MAX_ZOOM])
-    .on('zoom', (event) => {
-      g.attr('transform', event.transform);
-      currentZoomTransform = event.transform;
-      updateMapViewAnchorState(projection, width, height, 'world');
+  const worldOutlineState = createRegionOutlineLayers(g, path, d => normalizeCountryNumericId(d.id));
+  attachRegionPointerHandlers(
+    countryPaths,
+    d => getWorldFeatureLabel(d, labelMap, lookupMaps),
+    worldOutlineState
+  );
+  syncRegionOutlineLayers(
+    worldOutlineState,
+    countries.features,
+    d => selectedNumericId && normalizeCountryNumericId(d.id) === selectedNumericId
+  );
 
-      // Keep country stroke width constant (overlay strokes handled by vector-effect)
-      const scale = event.transform.k;
-      countryPaths.attr('stroke-width', 0.5 / scale);
+  const mapContainer = document.getElementById('map-panel-popup');
+  ensureMapZoomControls(mapContainer, width, height);
 
-      // Show/hide overlays based on zoom level
-      applyOverlayVisibility(scale, usStatesOverlay, usCountiesOverlay);
-    });
-
-  recomputeZoomForResizeIfNeeded(projection, width, height);
-
-  svg.call(zoom);
+  setupMapZoom({
+    svgElement,
+    g,
+    projection,
+    width,
+    height,
+    mapType: 'world',
+    onZoom: (event) => {
+      applyOverlayVisibility(event.transform.k, usStatesOverlay, usCountiesOverlay);
+    }
+  });
 
   const initialTransform = currentZoomTransform || d3.zoomIdentity;
   applyOverlayVisibility(initialTransform.k, usStatesOverlay, usCountiesOverlay);
-
-  if (currentZoomTransform) {
-    svg.call(zoom.transform, currentZoomTransform);
-  }
-
+  attachMapPointerLeaveSafety(svgElement, g);
   attachMapWheelCapture();
   updateMapViewAnchorState(projection, width, height, 'world');
 }
 
-// Render the US counties map
-async function renderUSMap(svgElement, width, height) {
+async function renderUSMap(svgElement, width, height, generation) {
   const mapData = await loadUSCountiesMap();
+  if (isMapRenderStale(generation)) return;
+
   if (!mapData) {
     console.error('Map data not available');
     return;
   }
-  
-  // Reset zoom if switching to a different map type
+
   if (currentMapType !== 'us') {
     currentZoomTransform = null;
     clearMapViewAnchorState();
     currentMapType = 'us';
   }
-  
+
   const svg = d3.select(svgElement);
   svg.selectAll('*').remove();
-  
-  // Convert TopoJSON to GeoJSON
+  resetMapHoverState();
+
   const counties = topojson.feature(mapData, mapData.objects.counties);
-  const states = topojson.feature(mapData, mapData.objects.states);
-  
-  // Create projection
+
   const projection = d3.geoAlbersUsa()
     .fitSize([width - MAP_FIT_PADDING, height - MAP_FIT_PADDING], counties);
-  
+
   const path = d3.geoPath().projection(projection);
-  
-  // Add a background
+
   svg.append('rect')
     .attr('width', width)
     .attr('height', height)
     .attr('fill', '#f0f9ff');
-  
-  // Create a group for zoom/pan
+
   const g = svg.append('g');
-  
-  // Render counties
-  const countyPaths = g.append('g')
+  const fipsCol = detectFIPSColumn();
+  const countyLabelMap = buildCountyLabelMap(fipsCol);
+
+  const countyPaths = styleRegionFillPath(g.append('g')
     .attr('class', 'counties')
     .selectAll('path')
     .data(counties.features)
     .join('path')
     .attr('d', path)
-    .attr('fill', d => {
-      const fipsCode = d.id;
-      return getColorForFIPS(fipsCode);
-    })
-    .attr('stroke', '#ffffff')
-    .attr('stroke-width', 0.3)
-    .style('cursor', 'pointer')
+    .attr('fill', d => getColorForFIPS(d.id)))
     .on('click', function(evt, d) {
-      const fipsCol = detectFIPSColumn();
-      if (!fipsCol) return;
-      
-      const fipsCode = d.id;
-      const row = window.appState.jsonData.find(r => {
-        let rowFips = r[fipsCol];
-        if (rowFips === undefined || rowFips === null || rowFips === '..') return false;
-        rowFips = String(rowFips).padStart(5, '0');
-        return rowFips === fipsCode;
-      });
-      
-      if (!row) return;
-      
-      let label;
-      if (window.appState.geoMode === 'country') {
-        label = row.Country;
-      } else if (window.appState.geoMode === 'county') {
-        label = row.__displayName || `${(row.County || '').toString().trim()}, ${(row.State || '').toString().trim()}`;
-      } else {
-        label = row[window.appState.dataColumn];
+      if (!fipsCol) {
+        showMapToast('This dataset has no FIPS code column.');
+        return;
       }
-      
+
+      const label = resolveCountyClick(d.id, fipsCol);
       if (!label) return;
       handleLocationClick(label, evt);
-    })
-    .on('mouseenter', function(evt, d) {
-      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
-      d3.select(this)
-        .attr('stroke', '#334155')
-        .attr('stroke-width', 1.5 / currentScale);
-    })
-    .on('mouseleave', function() {
-      const currentScale = currentZoomTransform ? currentZoomTransform.k : 1;
-      d3.select(this)
-        .attr('stroke', '#ffffff')
-        .attr('stroke-width', 0.3 / currentScale);
-    });
-  
-  // Render state borders on top
-  const statePaths = g.append('g')
-    .attr('class', 'states')
-    .selectAll('path')
-    .data(states.features)
-    .join('path')
-    .attr('d', path)
-    .attr('fill', 'none')
-    .attr('stroke', '#64748b')
-    .attr('stroke-width', 1)
-    .attr('stroke-linejoin', 'round')
-    .attr('pointer-events', 'none');
-  
-  // Add zoom behavior
-  const zoom = d3.zoom()
-    .scaleExtent([1, MAX_ZOOM])
-    .on('zoom', (event) => {
-      g.attr('transform', event.transform);
-      currentZoomTransform = event.transform;
-      updateMapViewAnchorState(projection, width, height, 'us');
-
-      // Keep stroke widths constant by inversely scaling them
-      const scale = event.transform.k;
-      countyPaths.attr('stroke-width', 0.3 / scale);
-      statePaths.attr('stroke-width', 1 / scale);
     });
 
-  recomputeZoomForResizeIfNeeded(projection, width, height);
+  const selectedFips = isFeatureMapSelectionMode()
+    ? getFIPSForLocation(window.appState.selectedCountry)
+    : null;
 
-  svg.call(zoom);
+  appendFeatureMesh(g, path, topojson.mesh(mapData, mapData.objects.counties), 'counties-mesh', MAP_REGION_STROKE, MAP_REGION_STROKE_WIDTH);
+  appendFeatureMesh(
+    g,
+    path,
+    topojson.mesh(mapData, mapData.objects.states, (a, b) => a !== b),
+    'states-mesh',
+    '#64748b',
+    1
+  );
 
-  if (currentZoomTransform) {
-    svg.call(zoom.transform, currentZoomTransform);
-  }
+  const countyOutlineState = createRegionOutlineLayers(g, path, d => normalizeFipsCode(d.id));
+  attachRegionPointerHandlers(
+    countyPaths,
+    d => getCountyFeatureLabel(d, countyLabelMap),
+    countyOutlineState
+  );
+  syncRegionOutlineLayers(
+    countyOutlineState,
+    counties.features,
+    d => selectedFips && normalizeFipsCode(d.id) === selectedFips
+  );
 
+  const mapContainer = document.getElementById('map-panel-popup');
+  ensureMapZoomControls(mapContainer, width, height);
+
+  setupMapZoom({
+    svgElement,
+    g,
+    projection,
+    width,
+    height,
+    mapType: 'us',
+    onZoom: () => {}
+  });
+
+  attachMapPointerLeaveSafety(svgElement, g);
   attachMapWheelCapture();
   updateMapViewAnchorState(projection, width, height, 'us');
 }
 
-// Main render function for the map panel
 async function renderMapPanel() {
   const mapContainer = document.getElementById('map-panel-popup');
   if (!mapContainer || mapContainer.style.display === 'none') return;
-  
+
   const svg = mapContainer.querySelector('#map-svg');
   if (!svg) return;
-  
-  // Check for lat/long first (highest priority), then country code, then FIPS
+
+  if (mapContainer.offsetWidth === 0 || mapContainer.offsetHeight === 0) {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
+  const { width, height } = syncMapSvgSize(mapContainer, svg);
+  const generation = beginMapRender();
+
   const latLongCols = detectLatLongColumns();
   const countryCodeCol = detectCountryCodeColumn();
   const fipsCol = detectFIPSColumn();
-  
+
   if (!latLongCols && !countryCodeCol && !fipsCol) {
-    // No geo column - show message
     const svgEl = d3.select(svg);
     svgEl.selectAll('*').remove();
-    const width = parseInt(svg.getAttribute('width')) || 500;
-    const height = parseInt(svg.getAttribute('height')) || 400;
     svgEl.append('text')
       .attr('x', width / 2)
       .attr('y', height / 2)
@@ -1059,22 +1306,20 @@ async function renderMapPanel() {
       .text('No geographic columns found in dataset');
     return;
   }
-  
-  const width = parseInt(svg.getAttribute('width')) || 500;
-  const height = parseInt(svg.getAttribute('height')) || 400;
 
-  // Render based on available columns (lat/long has highest priority)
   if (latLongCols) {
-    await renderLatLongMap(svg, width, height);
+    await renderLatLongMap(svg, width, height, generation);
   } else if (countryCodeCol) {
-    await renderWorldMap(svg, width, height);
+    await renderWorldMap(svg, width, height, generation);
   } else {
-    await renderUSMap(svg, width, height);
+    await renderUSMap(svg, width, height, generation);
   }
+
+  if (isMapRenderStale(generation)) return;
 }
 
 window.renderMapPanel = renderMapPanel;
+window.syncMapSvgSize = syncMapSvgSize;
 window.detectFIPSColumn = detectFIPSColumn;
 window.detectCountryCodeColumn = detectCountryCodeColumn;
 window.detectLatLongColumns = detectLatLongColumns;
-

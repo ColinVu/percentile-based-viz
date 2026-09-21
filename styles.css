@@ -72,7 +72,6 @@ body:not(.sidebar-open) .sidebar-toggle {
   display: flex;
   flex-direction: column;
   padding: 0;
-  border-bottom: 1px solid #e4e4e7;
   background-color: #fafafa;
 }
 
@@ -115,11 +114,12 @@ body:not(.sidebar-open) .sidebar-toggle {
   display: flex;
   gap: 0;
   width: 100%;
+  border-bottom: 1px solid #e4e4e7;
 }
 
 .sidebar-tab {
   flex: 1;
-  padding: 14px 12px;
+  padding: 12px 6px 10px;
   border: none;
   background: none;
   font-size: var(--font-size-xs);
@@ -128,8 +128,7 @@ body:not(.sidebar-open) .sidebar-toggle {
   cursor: pointer;
   transition: color 0.2s ease, background 0.2s ease;
   border-bottom: 2px solid transparent;
-  margin-bottom: -10px;
-  margin-top: 17px;
+  margin: 0;
 }
 
 .sidebar-tab:hover {
@@ -139,6 +138,7 @@ body:not(.sidebar-open) .sidebar-toggle {
 .sidebar-tab.active {
   color: var(--color-text-primary);
   border-bottom-color: #4f46e5;
+  margin-bottom: -1px;
   background: linear-gradient(to top, rgba(79, 70, 229, 0.08), transparent);
 }
 
@@ -300,6 +300,66 @@ body:not(.sidebar-open) .sidebar-toggle {
 
 .summation-framework-score {
   font-weight: var(--font-weight-bold);
+}
+
+#indices-tab-panel .h-index-list,
+#indices-tab-panel .summation-list {
+  max-height: none;
+  overflow-y: visible;
+}
+
+.index-card {
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 12px;
+}
+
+.index-card:last-child {
+  margin-bottom: 0;
+}
+
+.index-card-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-medium);
+  color: var(--color-text-heading);
+}
+
+.index-card-summary::-webkit-details-marker {
+  display: none;
+}
+
+.index-card-summary .collapse-arrow {
+  font-size: var(--font-size-xs);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.index-card:not([open]) .index-card-summary .collapse-arrow {
+  transform: rotate(-90deg);
+}
+
+.index-card-body {
+  padding: 0 14px 14px;
+}
+
+.index-card-description {
+  font-size: var(--font-size-md);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  margin: 0 0 12px;
+}
+
+.index-card-title {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Outlier Data pane */
@@ -1678,6 +1738,8 @@ select {
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   z-index: 150;
   resize: none;
+  display: flex;
+  flex-direction: column;
 }
 
 .map-resize-handle {
@@ -1698,10 +1760,93 @@ select {
 
 .map-popup-content {
   padding: 10px;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .map-popup-content svg {
   display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.map-zoom-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.map-zoom-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.map-zoom-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.map-zoom-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.map-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%) translateY(8px);
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #ffffff;
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.3;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 25;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.map-toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.map-region-tooltip {
+  position: absolute;
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #ffffff;
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.3;
+  pointer-events: none;
+  z-index: 26;
+  white-space: nowrap;
+}
+
+.map-region-tooltip.hidden {
+  display: none;
 }
 
 /* Column Selection Modal */

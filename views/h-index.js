@@ -28,18 +28,6 @@ function renderHIndex(container) {
     
     el.innerHTML = '';
 
-    // Header
-    const header = document.createElement('div');
-    header.className = 'h-index-header';
-    header.textContent = 'H-Index Scores (Experimental)';
-    el.appendChild(header);
-
-    // Description
-    const description = document.createElement('div');
-    description.className = 'h-index-description';
-    description.textContent = 'Measures how many metrics are at least k percentile points away from the median.';
-    el.appendChild(description);
-
     if (records.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'h-index-empty';
@@ -72,7 +60,7 @@ function renderHIndex(container) {
       // Right column: Score
       const scoreCol = document.createElement('div');
       scoreCol.className = 'h-index-score';
-      scoreCol.textContent = hIndexScore !== null ? String(hIndexScore) : 'â€”';
+      scoreCol.textContent = hIndexScore !== null ? String(hIndexScore) : '—';
 
       row.appendChild(nameCol);
       row.appendChild(scoreCol);

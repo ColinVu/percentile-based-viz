@@ -28,18 +28,6 @@ function renderSummation(container) {
     
     el.innerHTML = '';
 
-    // Header
-    const header = document.createElement('div');
-    header.className = 'summation-header';
-    header.textContent = 'Summation Scores (Experimental)';
-    el.appendChild(header);
-
-    // Description
-    const description = document.createElement('div');
-    description.className = 'summation-description';
-    description.textContent = 'Weighted sum showing how far each record deviates from the median across all metrics.';
-    el.appendChild(description);
-
     if (records.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'summation-empty';
@@ -72,7 +60,7 @@ function renderSummation(container) {
       // Right column: Score
       const scoreCol = document.createElement('div');
       scoreCol.className = 'summation-score';
-      scoreCol.textContent = summationScore !== null ? summationScore.toFixed(2) : 'â€”';
+      scoreCol.textContent = summationScore !== null ? summationScore.toFixed(2) : '—';
 
       row.appendChild(nameCol);
       row.appendChild(scoreCol);

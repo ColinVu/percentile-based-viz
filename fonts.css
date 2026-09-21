@@ -122,12 +122,14 @@
 }
 .h-index-header,
 .summation-header,
+.index-card-title,
 .outlier-data-header,
 .control-section h3 {
   text-transform: var(--text-transform-panel-header) !important;
 }
 .h-index-description,
 .summation-description,
+.index-card-description,
 .outlier-data-description,
 .h-index-empty,
 .summation-empty,

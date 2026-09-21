@@ -42,9 +42,9 @@
     <div class="sidebar-header">
       <div class="sidebar-tabs">
         <button class="sidebar-tab active" data-tab="controls" type="button">Controls</button>
-        <button class="sidebar-tab" data-tab="outlier-data" type="button">Outlier Data</button>
-        <button class="sidebar-tab" data-tab="h-index" type="button">H-index</button>
-        <button class="sidebar-tab" data-tab="summation" type="button">Summation</button>      </div>
+        <button class="sidebar-tab" data-tab="outlier-data" type="button">Outlier Analysis</button>
+        <button class="sidebar-tab" data-tab="indices" type="button">Outlier Aggregation</button>
+      </div>
     </div>
     
     <div class="sidebar-content">
@@ -165,12 +165,32 @@
         <div id="outlier-data-content" class="outlier-data-container"></div>
       </div>
 
-      <div class="tab-panel" id="h-index-tab-panel">
-        <div id="h-index-content" class="h-index-container"></div>
-      </div>
+      <div class="tab-panel" id="indices-tab-panel">
+        <details class="index-card" id="h-index-card" open>
+          <summary class="index-card-summary">
+            <span class="index-card-title">H-Index Scores (Experimental)</span>
+            <span class="collapse-arrow">&#9660;</span>
+          </summary>
+          <div class="index-card-body">
+            <p class="index-card-description">
+              Measures how many metrics are at least k percentile points away from the median.
+            </p>
+            <div id="h-index-content" class="h-index-container"></div>
+          </div>
+        </details>
 
-      <div class="tab-panel" id="summation-tab-panel">
-        <div id="summation-content" class="summation-container"></div>
+        <details class="index-card" id="summation-card">
+          <summary class="index-card-summary">
+            <span class="index-card-title">Summation Scores (Experimental)</span>
+            <span class="collapse-arrow">&#9660;</span>
+          </summary>
+          <div class="index-card-body">
+            <p class="index-card-description">
+              Weighted sum showing how far each record deviates from the median across all metrics.
+            </p>
+            <div id="summation-content" class="summation-container"></div>
+          </div>
+        </details>
       </div>
 
     </div>
@@ -247,7 +267,7 @@
         <!-- Map Panel Popup (resizable) -->
         <div id="map-panel-popup" class="map-popup" style="display: none;">
           <div class="map-popup-content">
-            <svg id="map-svg" width="380" height="300"></svg>
+            <svg id="map-svg"></svg>
           </div>
         </div>
       </div>
@@ -484,7 +504,7 @@
       const builtIn = {
         'country-development': { href: 'CountryDevelopmentIndicators_withcode.xlsx', filename: 'CountryDevelopmentIndicators_withcode.xlsx' },
         'us-counties': { href: 'georgia-county-indicators.xlsx', filename: 'georgia-county-indicators.xlsx' },
-        'colleges': { href: 'colleges.xlsx', filename: 'colleges.xlsx' },
+        'colleges': { href: 'colleges.csv', filename: 'colleges.csv' },
         'nsa-names-atl': { href: 'NSA_Names_AllVariables_atl.xlsx', filename: 'NSA_Names_AllVariables_atl.xlsx' }
       };
 
@@ -1403,6 +1423,8 @@
         // Re-render if in Final View
         if (window.appState.viewMode === 'category-final' && window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
           window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+        } else if (window.appState.viewMode === 'category-final' && window.appState.finalViewMapMode && typeof window.renderMapPanel === 'function') {
+          window.renderMapPanel();
         }
       }
 
@@ -1422,6 +1444,15 @@
           }
           if (window.appState.viewMode === 'category-final' && window.appState.categorySelectedMetricKey && typeof window.renderBeeswarmCategoryFinal === 'function') {
             window.renderBeeswarmCategoryFinal(window.appState.categorySelectedMetricKey);
+          }
+
+          if (window.appState.viewMode === 'category-final' && typeof window.renderMapPanel === 'function') {
+            const mapPopup = document.getElementById('map-panel-popup');
+            if (mapPopup && mapPopup.style.display !== 'none') {
+              requestAnimationFrame(function() {
+                window.renderMapPanel();
+              });
+            }
           }
         });
       }
@@ -1553,14 +1584,14 @@
           const panel = document.getElementById(tabId + '-tab-panel');
           if (panel) panel.classList.add('active');
 
-          // When switching to H-index tab, render all records with their H-index scores
-          if (tabId === 'h-index' && typeof window.renderHIndex === 'function') {
-            window.renderHIndex();
-          }
-
-          // When switching to Summation tab, render all records with their summation scores
-          if (tabId === 'summation' && typeof window.renderSummation === 'function') {
-            window.renderSummation();
+          // When switching to H-index & Summation tab, render both score views
+          if (tabId === 'indices') {
+            if (typeof window.renderHIndex === 'function') {
+              window.renderHIndex();
+            }
+            if (typeof window.renderSummation === 'function') {
+              window.renderSummation();
+            }
           }
 
           // When switching to Outlier Data tab, render all records with outliers
@@ -2328,6 +2359,7 @@
       let startHeight = 0;
       let startX = 0;
       let startY = 0;
+      let resizeRenderTimeout = null;
       
       resizeHandle.addEventListener('mousedown', function(e) {
         isResizing = true;
@@ -2350,23 +2382,25 @@
         
         mapPopup.style.width = newWidth + 'px';
         mapPopup.style.height = newHeight + 'px';
-        
-        // Update SVG size
-        const svg = document.getElementById('map-svg');
-        if (svg) {
-          const headerHeight = 0;
-          const padding = 20;
-          svg.setAttribute('width', newWidth - padding);
-          svg.setAttribute('height', newHeight - headerHeight - padding);
-          // Re-render map with new size
+
+        if (resizeRenderTimeout) clearTimeout(resizeRenderTimeout);
+        resizeRenderTimeout = setTimeout(function() {
           if (typeof window.renderMapPanel === 'function') {
             window.renderMapPanel();
           }
-        }
+        }, 100);
       });
       
       document.addEventListener('mouseup', function() {
+        if (!isResizing) return;
         isResizing = false;
+        if (resizeRenderTimeout) {
+          clearTimeout(resizeRenderTimeout);
+          resizeRenderTimeout = null;
+        }
+        if (typeof window.renderMapPanel === 'function') {
+          window.renderMapPanel();
+        }
       });
     }
   </script>

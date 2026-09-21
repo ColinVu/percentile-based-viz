@@ -32,6 +32,73 @@ function getEffectiveColor(originalColor) {
   return overrides[originalColor] || originalColor;
 }
 
+function isMissingBeeswarmLabel(value) {
+  if (value === undefined || value === null) return true;
+  if (value === '..') return true;
+  if (typeof value === 'string' && value.trim() === '') return true;
+  return false;
+}
+
+function getBeeswarmRowLabel(row) {
+  if (!row) return null;
+  let label;
+  if (window.appState.geoMode === 'country') {
+    label = row.Country;
+  } else if (window.appState.geoMode === 'county') {
+    label = row.__displayName || `${(row.County || '').toString().trim()}, ${(row.State || '').toString().trim()}`;
+  } else {
+    label = row[window.appState.dataColumn];
+  }
+  if (isMissingBeeswarmLabel(label)) return null;
+  return String(label);
+}
+
+function ensureBeeswarmRowIds(rows) {
+  rows.forEach((row, index) => {
+    if (row.__beeswarmRowId == null) {
+      row.__beeswarmRowId = index;
+    }
+  });
+}
+
+function getBeeswarmRowKey(row, index) {
+  if (row.__beeswarmRowId == null) {
+    row.__beeswarmRowId = index;
+  }
+  return String(row.__beeswarmRowId);
+}
+
+function findPreviousBeeswarmNode(previousNodes, rowKey) {
+  return previousNodes.find(p => p.data && p.data.rowKey === rowKey);
+}
+
+function buildMergedPercentileGuides(sortedVals) {
+  const groups = [];
+  for (let p = 0; p <= 100; p += 10) {
+    const qVal = d3.quantileSorted(sortedVals, p / 100);
+    if (qVal == null) continue;
+    const last = groups[groups.length - 1];
+    if (last && last.qVal === qVal) {
+      last.percentiles.push(p);
+    } else {
+      groups.push({ qVal, percentiles: [p] });
+    }
+  }
+  return groups.map(group => ({
+    qVal: group.qVal,
+    label: group.percentiles.length > 1
+      ? `${group.percentiles[0]}\u2013${group.percentiles[group.percentiles.length - 1]}%`
+      : `${group.percentiles[0]}%`
+  }));
+}
+
+function findSelectedBeeswarmRow() {
+  const selected = window.appState.selectedCountry;
+  if (isMissingBeeswarmLabel(selected)) return null;
+  const target = String(selected);
+  return window.appState.jsonData.find(row => getBeeswarmRowLabel(row) === target) || null;
+}
+
 // Helper function to highlight a beeswarm element by label
 function highlightBeeswarmElement(label, highlight) {
   const svg = d3.select('#beeswarm-svg');
@@ -421,9 +488,11 @@ function ensureFinalViewBeeswarmCheckbox() {
       window.appState.finalViewMapMode = this.checked;
       const mapPopup = document.getElementById('map-panel-popup');
       if (mapPopup) {
-        mapPopup.style.display = this.checked ? 'block' : 'none';
+        mapPopup.style.display = this.checked ? 'flex' : 'none';
         if (this.checked && typeof window.renderMapPanel === 'function') {
-          window.renderMapPanel();
+          requestAnimationFrame(function() {
+            window.renderMapPanel();
+          });
         }
       }
     });
@@ -570,12 +639,7 @@ function renderBoxPlotCategoryFinal(metricKey) {
     .attr('stroke-width', 1.5);
 
   // Highlight current selection position on the plot
-  const selectedRow = (window.appState.geoMode === 'country')
-    ? window.appState.jsonData.find(d => d.Country === window.appState.selectedCountry)
-    : window.appState.jsonData.find(d => {
-        const label = d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`;
-        return label === window.appState.selectedCountry;
-      });
+  const selectedRow = findSelectedBeeswarmRow();
   if (selectedRow && selectedRow[metricKey] != null && selectedRow[metricKey] !== '..') {
     const val = typeof selectedRow[metricKey] === 'number' ? selectedRow[metricKey] : parseFloat(selectedRow[metricKey]);
     if (!isNaN(val)) {
@@ -669,97 +733,45 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   // Check if in selection mode
   const inSelectionMode = isSelectionEncodingMode();
 
-  const encodingField = window.appState.categoryEncodedField;
-  const hasEncodingField = !inSelectionMode && encodingField && window.appState.jsonData.length > 0 && Object.prototype.hasOwnProperty.call(window.appState.jsonData[0], encodingField);
+  const colorCtx = typeof window.buildFeatureEncodingColorContext === 'function'
+    ? window.buildFeatureEncodingColorContext()
+    : null;
+  const encodingField = colorCtx ? colorCtx.encodingField : window.appState.categoryEncodedField;
+  const hasEncodingField = colorCtx ? colorCtx.hasEncodingField : false;
+  const fallbackCategory = colorCtx ? colorCtx.fallbackCategory : 'All items';
   const encodingLabel = encodingField ? window.formatMetricName(encodingField) : 'Group';
-  const fallbackCategory = hasEncodingField ? 'Not specified' : 'All items';
-  
-  // Check if encoding field is numeric
-  const numericCols = typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [];
-  const isNumericEncoding = hasEncodingField && numericCols.includes(encodingField);
-  
+
   // Check for text encoding field
   const textEncodingField = window.appState.categoryTextEncodedField;
   const hasTextEncoding = textEncodingField && textEncodingField !== '' && window.appState.jsonData.length > 0 && Object.prototype.hasOwnProperty.call(window.appState.jsonData[0], textEncodingField);
 
   // Use filtered rows if available (for filter functionality), otherwise use all data
-  const dataToUse = Array.isArray(window.appState.filterSelectFilteredRows) && window.appState.filterSelectFilteredRows.length > 0
-    ? window.appState.filterSelectFilteredRows
-    : window.appState.jsonData;
+  const dataToUse = colorCtx ? colorCtx.dataToUse : (
+    Array.isArray(window.appState.filterSelectFilteredRows) && window.appState.filterSelectFilteredRows.length > 0
+      ? window.appState.filterSelectFilteredRows
+      : window.appState.jsonData
+  );
 
-  // Compute quantile bins for numeric encoding (5 bins) - must be after dataToUse is defined
-  let quantileBins = null;
-  if (isNumericEncoding) {
-    const encodingValues = dataToUse
-      .map(d => d[encodingField])
-      .filter(v => v !== undefined && v !== null && v !== '..' && !Number.isNaN(parseFloat(v)))
-      .map(v => parseFloat(v))
-      .sort((a, b) => a - b);
-    
-    if (encodingValues.length > 0) {
-      // Compute quintile thresholds (20th, 40th, 60th, 80th percentiles)
-      const q20 = d3.quantile(encodingValues, 0.2);
-      const q40 = d3.quantile(encodingValues, 0.4);
-      const q60 = d3.quantile(encodingValues, 0.6);
-      const q80 = d3.quantile(encodingValues, 0.8);
-      
-      quantileBins = {
-        thresholds: [q20, q40, q60, q80],
-        labels: ['Lowest 20%', 'Low 20-40%', 'Middle 40-60%', 'High 60-80%', 'Highest 20%']
-      };
-    }
-  }
-  
-  // Function to get bin for a numeric value
-  function getQuantileBin(value) {
-    if (!quantileBins || value === undefined || value === null || value === '..' || Number.isNaN(parseFloat(value))) {
-      return fallbackCategory;
-    }
-    const numVal = parseFloat(value);
-    const thresholds = quantileBins.thresholds;
-    if (numVal < thresholds[0]) return quantileBins.labels[0];
-    if (numVal < thresholds[1]) return quantileBins.labels[1];
-    if (numVal < thresholds[2]) return quantileBins.labels[2];
-    if (numVal < thresholds[3]) return quantileBins.labels[3];
-    return quantileBins.labels[4];
-  }
+  ensureBeeswarmRowIds(dataToUse);
 
   const values = dataToUse
-    .map(d => {
+    .map((d, rowIndex) => {
       const raw = d[metricKey];
       const v = typeof raw === 'number' ? raw : parseFloat(raw);
       if (raw === '..' || raw === undefined || raw === null || Number.isNaN(v)) return null;
-      let label;
-      if (window.appState.geoMode === 'country') {
-        label = d.Country;
-      } else if (window.appState.geoMode === 'county') {
-        label = d.__displayName || `${(d.County || '').toString().trim()}, ${(d.State || '').toString().trim()}`;
-      } else {
-        label = d[window.appState.dataColumn];
-      }
+      const label = getBeeswarmRowLabel(d);
       if (!label) return null;
 
+      const categoryValue = hasEncodingField && colorCtx
+        ? colorCtx.getCategoryForRow(d)
+        : fallbackCategory;
       const rawCategory = hasEncodingField ? d[encodingField] : null;
-      let categoryValue = fallbackCategory;
-      if (hasEncodingField) {
-        if (isNumericEncoding) {
-          // For numeric encoding, use quantile bins
-          categoryValue = getQuantileBin(rawCategory);
-        } else {
-          // For categorical encoding, use the value as-is
-          if (rawCategory === undefined || rawCategory === null || rawCategory === '..') {
-            categoryValue = fallbackCategory;
-          } else {
-            const catStr = String(rawCategory).trim();
-            categoryValue = catStr === '' ? fallbackCategory : catStr;
-          }
-        }
-      }
       
       // Get text value for text encoding
       const textValue = hasTextEncoding ? (d[textEncodingField] || '?') : null;
 
       return {
+        rowKey: getBeeswarmRowKey(d, rowIndex),
         label,
         value: v,
         category: categoryValue,
@@ -801,62 +813,12 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   if (categories.length === 0) {
     categories.push(fallbackCategory);
   }
-  
-  // Sort categories to put "Not specified" last
-  categories.sort((a, b) => {
-    const aIsNotSpecified = a === 'Not specified' || a === fallbackCategory;
-    const bIsNotSpecified = b === 'Not specified' || b === fallbackCategory;
-    
-    if (aIsNotSpecified && !bIsNotSpecified) return 1; // a comes after b
-    if (!aIsNotSpecified && bIsNotSpecified) return -1; // a comes before b
-    
-    // For numeric bins, maintain the order from lowest to highest
-    if (isNumericEncoding && quantileBins) {
-      const aIndex = quantileBins.labels.indexOf(a);
-      const bIndex = quantileBins.labels.indexOf(b);
-      if (aIndex >= 0 && bIndex >= 0) return aIndex - bIndex;
-    }
-    
-    // For categorical, maintain original order (alphabetical from Set)
-    return 0;
-  });
 
-  // In selection mode, we use a different coloring strategy
-  const defaultUnselectedColor = '#94a3b8'; // Grey for unselected in selection mode
-  
-  const colorScale = d3.scaleOrdinal()
-    .domain(categories)
-    .range(categories.map((cat, idx) => {
-      // "Not specified" should always be grey
-      if (cat === 'Not specified' || cat === fallbackCategory) {
-        return '#94a3b8'; // Grey for not specified
-      }
-      
-      if (inSelectionMode) {
-        // In selection mode, colorScale returns grey - actual colors come from getSelectionModeColor
-        return defaultUnselectedColor;
-      }
-      if (categories.length === 1 && (!hasEncodingField || !encodingField)) {
-        // No color encoding - use blue
-        return '#4f46e5';
-      } else if (categories.length === 1) {
-        return d3.interpolateRainbow(0.35);
-      }
-      // For numeric encoding, use sequential color scheme (blue-green-yellow-red gradient)
-      if (isNumericEncoding && quantileBins) {
-        // Map to a sequential color scale: light to dark or cool to warm
-        const colors = ['#3288bd', '#66c2a5', '#fee08b', '#f46d43', '#d53e4f']; // Cool to warm
-        // Find the index in the quantile bins labels
-        const binIndex = quantileBins.labels.indexOf(cat);
-        if (binIndex >= 0) {
-          return colors[binIndex];
-        }
-        return colors[colors.length - 1];
-      }
-      // For categorical encoding, use rainbow
-      return d3.interpolateRainbow(idx / categories.length);
-    }));
-  
+  const defaultUnselectedColor = '#94a3b8';
+  const colorScale = colorCtx
+    ? colorCtx.buildColorScale(categories)
+    : d3.scaleOrdinal().domain([fallbackCategory]).range(['#4f46e5']);
+
   // Function to get the actual fill color for a data point
   function getDotColor(d) {
     if (inSelectionMode) {
@@ -864,7 +826,8 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       if (selColor) return selColor;
       return defaultUnselectedColor;
     }
-    return getEffectiveColor(colorScale(d.data.category));
+    const applyColor = colorCtx ? colorCtx.getEffectiveColor : getEffectiveColor;
+    return applyColor(colorScale(d.data.category));
   }
 
   svg.append('rect')
@@ -881,48 +844,23 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
   const axisG = svg.append('g').attr('transform', `translate(${plotPaddingLeft}, 0)`).call(axis);
   axisG.selectAll('text').style('font-size', FONTS.size.xs + 'px').style('user-select', 'none');
 
-  for (let p = 10; p < 100; p += 10) {
-    const qVal = d3.quantileSorted(sortedVals, p / 100);
-    if (qVal != null) {
-      const qy = y(qVal);
-      svg.append('line')
-        .attr('x1', plotPaddingLeft)
-        .attr('x2', width - plotPaddingRight)
-        .attr('y1', qy)
-        .attr('y2', qy)
-        .attr('stroke', '#e2e8f0')
-        .attr('stroke-width', 1)
-        .attr('pointer-events', 'none');
-      svg.append('text')
-        .attr('x', width - plotPaddingRight + 6)
-        .attr('y', qy + 3)
-        .attr('fill', '#475569')
-        .attr('font-size', FONTS.size.xs)
-        .style('user-select', 'none')
-        .text(`${p}%`);
-    }
-  }
-
-  [0, 100].forEach(P => {
-    const qVal = d3.quantileSorted(sortedVals, P / 100);
-    if (qVal != null) {
-      const qy = y(qVal);
-      svg.append('line')
-        .attr('x1', plotPaddingLeft)
-        .attr('x2', width - plotPaddingRight)
-        .attr('y1', qy)
-        .attr('y2', qy)
-        .attr('stroke', '#e2e8f0')
-        .attr('stroke-width', 1)
-        .attr('pointer-events', 'none');
-      svg.append('text')
-        .attr('x', width - plotPaddingRight + 6)
-        .attr('y', qy + 3)
-        .attr('fill', '#475569')
-        .attr('font-size', FONTS.size.xs)
-        .style('user-select', 'none')
-        .text(`${P}%`);
-    }
+  buildMergedPercentileGuides(sortedVals).forEach(({ qVal, label }) => {
+    const qy = y(qVal);
+    svg.append('line')
+      .attr('x1', plotPaddingLeft)
+      .attr('x2', width - plotPaddingRight)
+      .attr('y1', qy)
+      .attr('y2', qy)
+      .attr('stroke', '#e2e8f0')
+      .attr('stroke-width', 1)
+      .attr('pointer-events', 'none');
+    svg.append('text')
+      .attr('x', width - plotPaddingRight + 6)
+      .attr('y', qy + 3)
+      .attr('fill', '#475569')
+      .attr('font-size', FONTS.size.xs)
+      .style('user-select', 'none')
+      .text(label);
   });
 
   const nodes = withPct.map(d => ({
@@ -988,7 +926,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
     
     // Render background rectangles for selected item (behind text)
     const selectedRects = dataGroup.selectAll('rect.selected-bg')
-      .data(nodes.filter(n => isSelectedLocationText(n)), d => d.data.label);
+      .data(nodes.filter(n => isSelectedLocationText(n)), d => d.data.rowKey);
     
     selectedRects.enter()
       .append('rect')
@@ -996,11 +934,11 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
       .attr('x', d => {
         const textWidth = getCachedTextWidth(d.data.textValue);
         const halfWidth = (textWidth + 4) / 2; // 4px padding (2px each side)
-        const prev = previousNodes.find(p => p.data && p.data.label === d.data.label);
+        const prev = findPreviousBeeswarmNode(previousNodes, d.data.rowKey);
         return prev ? prev.x - halfWidth : d.x - halfWidth;
       })
       .attr('y', d => {
-        const prev = previousNodes.find(p => p.data && p.data.label === d.data.label);
+        const prev = findPreviousBeeswarmNode(previousNodes, d.data.rowKey);
         return prev ? prev.y - 6 : d.y - 6;
       })
       .attr('width', d => {
@@ -1034,16 +972,16 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
     
     // Render text labels
     const texts = dataGroup.selectAll('text')
-      .data(nodes, d => d.data.label);
+      .data(nodes, d => d.data.rowKey);
     
     const enteringTexts = texts.enter()
       .append('text')
       .attr('x', d => {
-        const prev = previousNodes.find(p => p.data && p.data.label === d.data.label);
+        const prev = findPreviousBeeswarmNode(previousNodes, d.data.rowKey);
         return prev ? prev.x : d.x;
       })
       .attr('y', d => {
-        const prev = previousNodes.find(p => p.data && p.data.label === d.data.label);
+        const prev = findPreviousBeeswarmNode(previousNodes, d.data.rowKey);
         return prev ? prev.y : d.y;
       })
       .attr('text-anchor', 'middle')
@@ -1230,7 +1168,7 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
     
     // Render circles (original behavior)
     const circles = dataGroup.selectAll('circle')
-      .data(nodes, d => d.data.label);
+      .data(nodes, d => d.data.rowKey);
 
     // In selection mode, check if this dot is a selected location
     const isSelectedLocation = (d) => {
@@ -1241,11 +1179,11 @@ function renderBeeswarmCategoryFinalActual(metricKey) {
     const enteringCircles = circles.enter()
       .append('circle')
     .attr('cx', d => {
-      const prev = previousNodes.find(p => p.data && p.data.label === d.data.label);
+      const prev = findPreviousBeeswarmNode(previousNodes, d.data.rowKey);
       return prev ? prev.x : d.x;
     })
     .attr('cy', d => {
-      const prev = previousNodes.find(p => p.data && p.data.label === d.data.label);
+      const prev = findPreviousBeeswarmNode(previousNodes, d.data.rowKey);
       return prev ? prev.y : d.y;
     })
     .attr('r', d => inSelectionMode ? d.r : (isSelectedLocation(d) ? d.r + 1.5 : d.r))

@@ -448,3 +448,160 @@ function computeSummationScore(percentiles) {
 
 window.computeAllDerivedData = computeAllDerivedData;
 
+function getFeatureEncodingDataRows() {
+  return Array.isArray(window.appState.filterSelectFilteredRows) &&
+    window.appState.filterSelectFilteredRows.length > 0
+    ? window.appState.filterSelectFilteredRows
+    : window.appState.jsonData;
+}
+
+function getEffectiveFeatureColor(originalColor) {
+  const overrides = window.appState.beeswarmColorOverrides || {};
+  return overrides[originalColor] || originalColor;
+}
+
+function buildFeatureEncodingColorContext() {
+  const inSelectionMode = window.appState.encodingMode === 'selection' &&
+    window.appState.viewMode === 'category-final';
+
+  const encodingField = window.appState.categoryEncodedField;
+  const hasEncodingField = !inSelectionMode && encodingField &&
+    window.appState.jsonData.length > 0 &&
+    Object.prototype.hasOwnProperty.call(window.appState.jsonData[0], encodingField);
+  const fallbackCategory = hasEncodingField ? 'Not specified' : 'All items';
+
+  const numericCols = typeof window.getNumericMetrics === 'function' ? window.getNumericMetrics() : [];
+  const isNumericEncoding = hasEncodingField && numericCols.includes(encodingField);
+  const dataToUse = getFeatureEncodingDataRows();
+
+  let quantileBins = null;
+  if (isNumericEncoding) {
+    const encodingValues = dataToUse
+      .map(d => d[encodingField])
+      .filter(v => v !== undefined && v !== null && v !== '..' && !Number.isNaN(parseFloat(v)))
+      .map(v => parseFloat(v))
+      .sort((a, b) => a - b);
+
+    if (encodingValues.length > 0) {
+      quantileBins = {
+        thresholds: [
+          d3.quantile(encodingValues, 0.2),
+          d3.quantile(encodingValues, 0.4),
+          d3.quantile(encodingValues, 0.6),
+          d3.quantile(encodingValues, 0.8)
+        ],
+        labels: ['Lowest 20%', 'Low 20-40%', 'Middle 40-60%', 'High 60-80%', 'Highest 20%']
+      };
+    }
+  }
+
+  function getQuantileBin(value) {
+    if (!quantileBins || value === undefined || value === null || value === '..' || Number.isNaN(parseFloat(value))) {
+      return fallbackCategory;
+    }
+    const numVal = parseFloat(value);
+    const thresholds = quantileBins.thresholds;
+    if (numVal < thresholds[0]) return quantileBins.labels[0];
+    if (numVal < thresholds[1]) return quantileBins.labels[1];
+    if (numVal < thresholds[2]) return quantileBins.labels[2];
+    if (numVal < thresholds[3]) return quantileBins.labels[3];
+    return quantileBins.labels[4];
+  }
+
+  function getCategoryForRow(row) {
+    if (!hasEncodingField || !row) return fallbackCategory;
+    const rawCategory = row[encodingField];
+    if (isNumericEncoding) {
+      return getQuantileBin(rawCategory);
+    }
+    if (rawCategory === undefined || rawCategory === null || rawCategory === '..') {
+      return fallbackCategory;
+    }
+    const catStr = String(rawCategory).trim();
+    return catStr === '' ? fallbackCategory : catStr;
+  }
+
+  function sortCategories(categories) {
+    const sorted = categories.slice();
+    sorted.sort((a, b) => {
+      const aIsNotSpecified = a === 'Not specified' || a === fallbackCategory;
+      const bIsNotSpecified = b === 'Not specified' || b === fallbackCategory;
+      if (aIsNotSpecified && !bIsNotSpecified) return 1;
+      if (!aIsNotSpecified && bIsNotSpecified) return -1;
+      if (isNumericEncoding && quantileBins) {
+        const aIndex = quantileBins.labels.indexOf(a);
+        const bIndex = quantileBins.labels.indexOf(b);
+        if (aIndex >= 0 && bIndex >= 0) return aIndex - bIndex;
+      }
+      return 0;
+    });
+    return sorted;
+  }
+
+  function buildColorScale(categories) {
+    let cats = Array.from(categories).filter(Boolean);
+    if (cats.length === 0) cats = [fallbackCategory];
+    cats = sortCategories(cats);
+
+    const defaultUnselectedColor = '#94a3b8';
+
+    return d3.scaleOrdinal()
+      .domain(cats)
+      .range(cats.map((cat, idx) => {
+        if (cat === 'Not specified' || cat === fallbackCategory) {
+          return '#94a3b8';
+        }
+        if (inSelectionMode) {
+          return defaultUnselectedColor;
+        }
+        if (cats.length === 1 && (!hasEncodingField || !encodingField)) {
+          return '#4f46e5';
+        } else if (cats.length === 1) {
+          return d3.interpolateRainbow(0.35);
+        }
+        if (isNumericEncoding && quantileBins) {
+          const colors = ['#3288bd', '#66c2a5', '#fee08b', '#f46d43', '#d53e4f'];
+          const binIndex = quantileBins.labels.indexOf(cat);
+          if (binIndex >= 0) return colors[binIndex];
+          return colors[colors.length - 1];
+        }
+        return d3.interpolateRainbow(idx / cats.length);
+      }));
+  }
+
+  function getCategoriesFromRows(rows) {
+    return Array.from(new Set(rows.map(row => getCategoryForRow(row)))).filter(Boolean);
+  }
+
+  function getDefaultColorScale() {
+    return buildColorScale(getCategoriesFromRows(dataToUse));
+  }
+
+  function getColorForRow(row, colorScale) {
+    const scale = colorScale || getDefaultColorScale();
+    return getEffectiveFeatureColor(scale(getCategoryForRow(row)));
+  }
+
+  return {
+    inSelectionMode,
+    encodingField,
+    hasEncodingField,
+    fallbackCategory,
+    isNumericEncoding,
+    quantileBins,
+    dataToUse,
+    getCategoryForRow,
+    sortCategories,
+    buildColorScale,
+    getCategoriesFromRows,
+    getDefaultColorScale,
+    getColorForRow,
+    getDefaultDotColor: () => '#64748b',
+    getEffectiveColor: getEffectiveFeatureColor
+  };
+}
+
+window.getFeatureEncodingDataRows = getFeatureEncodingDataRows;
+window.getEffectiveFeatureColor = getEffectiveFeatureColor;
+window.buildFeatureEncodingColorContext = buildFeatureEncodingColorContext;
+
